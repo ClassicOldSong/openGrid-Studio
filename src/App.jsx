@@ -494,11 +494,13 @@ export default function App() {
   const interfaceThicknessValue = signal(0.4);
   const interfaceSeparationValue = signal(0.1);
   const circleSegmentsValue = signal(64);
-  const width = signal(6);
+  const width = signal(4);
   const height = signal(4);
   const top1Text = signal('0');
   const top2Text = signal('0');
-  const maskGrid = signal(buildRectangleMask(6, 4));
+  const maskGrid = signal(buildRectangleMask(4, 4));
+
+  const showModal = signal(false);
 
   // Load from local storage
   try {
@@ -612,11 +614,11 @@ export default function App() {
     }
   };
 
-  const applyRectangle = () => {
-    maskGrid.value = buildRectangleMask(width.value, height.value);
-    top1Text.value = '0';
-    top2Text.value = '0';
-  };
+  // const applyRectangle = () => {
+  //   maskGrid.value = buildRectangleMask(width.value, height.value);
+  //   top1Text.value = '0';
+  //   top2Text.value = '0';
+  // };
 
   const applyTrapezoid = () => {
     maskGrid.value = buildTrapezoidMask(width.value, height.value, top1Text.value, top2Text.value);
@@ -652,8 +654,18 @@ export default function App() {
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(exportText.value);
-      alert('Copied!');
+      showModal.value = true;
     } catch { }
+  };
+
+  const downloadScad = () => {
+    const element = document.createElement('a');
+    const file = new Blob([exportText.value], { type: 'text/plain' });
+    element.href = URL.createObjectURL(file);
+    element.download = 'opengrid_design.scad';
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
   };
 
   const tileSize = 56;
@@ -701,284 +713,336 @@ export default function App() {
   });
 
   const ResizeButtons = ({ onPlus, onMinus, vertical }) => (
-    <div class={$(() => vertical ? "flex flex-col gap-1 items-center" : "flex gap-1 items-center")}>
-      <button class="w-6 h-6 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded text-gray-600 font-bold text-sm transition" on:click={onPlus}>+</button>
-      <button class="w-6 h-6 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded text-gray-600 font-bold text-sm transition" on:click={onMinus}>-</button>
+    <div class={vertical ? "flex flex-col gap-1 items-center" : "flex flex-row gap-1 items-center"}>
+      <button class="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-gray-700 font-bold text-xs transition" on:click={onPlus}>+</button>
+      <button class="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-gray-700 font-bold text-xs transition" on:click={onMinus}>-</button>
     </div>
   );
 
   return (
-    <div class="p-6 grid gap-6 max-w-7xl mx-auto font-sans">
-      <div class="bg-white rounded-2xl shadow-sm border p-6 overflow-hidden">
-        <h2 class="text-xl font-bold mb-6">Board editor</h2>
-        <div class="flex flex-col items-center gap-4">
-          <ResizeButtons onPlus={() => updateSize(width.value, height.value + 1, 0, 1)} onMinus={() => updateSize(width.value, height.value - 1, 0, -1)} />
-          <div class="flex items-center gap-4">
-            <ResizeButtons vertical onPlus={() => updateSize(width.value + 1, height.value, 1, 0)} onMinus={() => updateSize(width.value - 1, height.value, -1, 0)} />
-            <div class="overflow-auto bg-gray-100 rounded-xl p-8 shadow-inner border max-w-full">
-              <svg attr:width={svgW} attr:height={svgH} class="rounded-lg border bg-white shadow-md">
-                <rect attr:x={pad} attr:y={pad} attr:width={boardW} attr:height={boardH} attr:fill="#000" />
-
-                {/* Layer 1: Inactive tiles (Holes) */}
-                <For entries={tiles} track="id">
-                  {({ item: { tx, ty, gx, gy } }) => {
-                    const active = $(() => tileFill(getMask(maskGrid.value, gx, gy)));
-                    return (
-                      <If condition={$(() => !active.value)}>
-                        {() => (
-                          <rect
-                            attr:x={pad + tx * tileSize} attr:y={pad + ty * tileSize}
-                            attr:width={tileSize} attr:height={tileSize}
-                            attr:fill="#fff"
-                          />
-                        )}
-                      </If>
-                    );
-                  }}
-                </For>
-
-                {/* Layer 2: Active tiles (Blue) */}
-                <For entries={tiles} track="id">
-                  {({ item: { tx, ty, gx, gy } }) => {
-                    const active = $(() => tileFill(getMask(maskGrid.value, gx, gy)));
-                    const x = pad + tx * tileSize + half;
-                    const y = pad + ty * tileSize + half;
-                    const sq = squareTile(x, y, tileSize);
-                    const border = 3;
-
-                    return (
-                      <If condition={active}>
-                        {() => (
-                          <g>
-                            <rect attr:x={sq.x} attr:y={sq.y} attr:width={sq.w} attr:height={sq.h} attr:fill="#000" />
-                            <rect attr:x={sq.x + border} attr:y={sq.y + border} attr:width={sq.w - border * 2} attr:height={sq.h - border * 2} attr:fill="#2563eb" />
-                          </g>
-                        )}
-                      </If>
-                    );
-                  }}
-                </For>
-
-                {/* Layer 3: Nodes */}
-                <For entries={nodes} track="id">
-                  {({ item: { gx, gy } }) => {
-                    const { x, y } = toNodeXY(gx, gy);
-                    const kind = $(() => topo.value.nodeKind[gy]?.[gx] ?? 'none');
-                    const dir = $(() => topo.value.nodeDir[gy]?.[gx] ?? null);
-                    const state = $(() => nodeState(kind.value, getMask(maskGrid.value, gx, gy)));
-                    return (
-                      <g>
-                        <NodeGlyph kind={kind} state={state} x={x} y={y} dir={dir} />
-                      </g>
-                    );
-                  }}
-                </For>
-
-                {/* Layer 4: Hitboxes (tiles) */}
-                <For entries={tiles} track="id">
-                  {({ item: { tx, ty, gx, gy } }) => (
-                    <rect
-                      attr:x={pad + tx * tileSize} attr:y={pad + ty * tileSize}
-                      attr:width={tileSize} attr:height={tileSize}
-                      attr:fill="transparent" on:click={() => toggleTile(gx, gy)} style="cursor: pointer"
-                    />
-                  )}
-                </For>
-
-                {/* Layer 5: Hitboxes (nodes) */}
-                <For entries={nodes} track="id">
-                  {({ item: { gx, gy } }) => {
-                    const { x, y } = toNodeXY(gx, gy);
-                    return (
-                      <circle attr:cx={x} attr:cy={y} attr:r={20} attr:fill="transparent" on:click={() => cycleNode(gx, gy)} style="cursor: pointer" />
-                    );
-                  }}
-                </For>
-              </svg>
-            </div>
-            <ResizeButtons vertical onPlus={() => updateSize(width.value + 1, height.value)} onMinus={() => updateSize(width.value - 1, height.value)} />
-          </div>
-          <ResizeButtons onPlus={() => updateSize(width.value, height.value + 1)} onMinus={() => updateSize(width.value, height.value - 1)} />
-        </div>
-      </div>
-
-      <div class="bg-white rounded-2xl shadow-sm border p-6 grid gap-6">
-        <h2 class="text-xl font-bold">Configuration</h2>
-
-        <div class="grid gap-4">
-          <div class="text-sm font-semibold uppercase tracking-wider text-gray-500">Shape Helpers</div>
-          <div class="grid md:grid-cols-4 gap-4 items-end">
-            <div class="grid gap-1">
-              <label class="text-sm font-medium">Width</label>
-              <input type="number" class="border rounded-lg h-10 px-3" value={width} on:input={(e) => updateSize(Math.max(1, Number(e.target.value) || 1), height.value)} />
-            </div>
-            <div class="grid gap-1">
-              <label class="text-sm font-medium">Height</label>
-              <input type="number" class="border rounded-lg h-10 px-3" value={height} on:input={(e) => updateSize(width.value, Math.max(1, Number(e.target.value) || 1))} />
-            </div>
-            <button class="bg-blue-600 text-white rounded-lg h-10 px-4 font-medium hover:bg-blue-700 transition" on:click={applyRectangle}>Rectangle</button>
-          </div>
-          <div class="grid md:grid-cols-4 gap-4 items-end">
-            <div class="grid gap-1">
-              <label class="text-sm font-medium">Top col 1 (0=rect)</label>
-              <input type="number" class="border rounded-lg h-10 px-3" value={top1Text} on:input={(e) => top1Text.value = e.target.value} />
-            </div>
-            <div class="grid gap-1">
-              <label class="text-sm font-medium">Top col 2 (0=rect)</label>
-              <input type="number" class="border rounded-lg h-10 px-3" value={top2Text} on:input={(e) => top2Text.value = e.target.value} />
-            </div>
-            <button class="bg-gray-100 text-gray-700 rounded-lg h-10 px-4 font-medium hover:bg-gray-200 transition" on:click={applyTrapezoid}>Apply Trapezoid</button>
-          </div>
-        </div>
-
-        <div class="grid gap-4 border-t pt-4">
-          <div class="text-sm font-semibold uppercase tracking-wider text-gray-500">Board Type</div>
-          <div class="flex gap-6">
-            <For entries={['Full', 'Lite', 'Heavy']}>
-              {({ item: v }) => (
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" class="w-4 h-4 text-blue-600" attr:checked={$(() => fullOrLite.value === v)} on:change={() => fullOrLite.value = v} />
-                  <span class="text-sm">{v}</span>
-                </label>
-              )}
-            </For>
-          </div>
-        </div>
-
-        <div class="grid gap-4 border-t pt-4">
-          <div class="text-sm font-semibold uppercase tracking-wider text-gray-500">Dimensions</div>
-          <div class="grid md:grid-cols-5 gap-4">
-            {[
-              { label: 'Tile Size', sig: tileSizeValue },
-              { label: 'Thickness', sig: tileThicknessValue },
-              { label: 'Lite Thk', sig: liteTileThicknessValue },
-              { label: 'Heavy Thk', sig: heavyTileThicknessValue },
-              { label: 'Heavy Gap', sig: heavyTileGapValue },
-            ].map(({ label, sig }) => (
-              <div class="grid gap-1">
-                <label class="text-xs font-medium text-gray-600">{label}</label>
-                <input type="number" class="border rounded-lg h-9 px-2 text-sm" value={sig} on:input={(e) => sig.value = Number(e.target.value) || 0} />
+    <div class="h-screen flex overflow-hidden font-sans bg-white">
+      {/* Left: Config */}
+      <div class="w-[400px] h-full overflow-auto bg-gray-50 border-r flex flex-col z-10">
+        <div class="p-8 flex flex-col gap-8">
+          <div>
+            <h2 class="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+              <div class="w-2 h-6 bg-blue-600 rounded-full"></div>
+              Configuration
+            </h2>
+            
+            <div class="grid gap-6">
+              <div class="grid gap-4">
+                <div class="text-[10px] font-bold uppercase tracking-widest text-blue-600/70">Shape Helpers</div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="grid gap-1">
+                    <label class="text-xs font-medium text-gray-500">Width</label>
+                    <input type="number" class="border rounded-lg h-9 px-3 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" value={width} on:input={(e) => updateSize(Math.max(1, Number(e.target.value) || 1), height.value)} />
+                  </div>
+                  <div class="grid gap-1">
+                    <label class="text-xs font-medium text-gray-500">Height</label>
+                    <input type="number" class="border rounded-lg h-9 px-3 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" value={height} on:input={(e) => updateSize(width.value, Math.max(1, Number(e.target.value) || 1))} />
+                  </div>
+                  {/*<button class="bg-blue-600 text-white rounded-lg h-9 px-4 text-sm font-semibold hover:bg-blue-700 transition" on:click={applyRectangle}>Rectangle</button>*/}
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="grid gap-1">
+                    <label class="text-xs font-medium text-gray-500">Top col 1</label>
+                    <input type="number" class="border rounded-lg h-9 px-3 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" value={top1Text} on:input={(e) => top1Text.value = e.target.value} />
+                  </div>
+                  <div class="grid gap-1">
+                    <label class="text-xs font-medium text-gray-500">Top col 2</label>
+                    <input type="number" class="border rounded-lg h-9 px-3 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" value={top2Text} on:input={(e) => top2Text.value = e.target.value} />
+                  </div>
+                  <button class="bg-blue-600 border text-white rounded-lg h-9 px-4 text-sm font-semibold hover:bg-blue-700 transition col-span-2" on:click={applyTrapezoid}>Apply</button>
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
 
-        <div class="grid gap-4 border-t pt-4">
-          <div class="text-sm font-semibold uppercase tracking-wider text-gray-500">Adhesive Base</div>
-          <div class="grid md:grid-cols-4 gap-4 items-end">
-            <label class="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" class="w-4 h-4 text-blue-600" attr:checked={addAdhesiveBase} on:change={(e) => addAdhesiveBase.value = e.target.checked} />
-              Enable adhesive base
-            </label>
-            <div class="grid gap-1">
-              <label class="text-xs font-medium text-gray-600">Adhesive thickness</label>
-              <input type="number" class="border rounded-lg h-9 px-2 text-sm" value={adhesiveBaseThicknessValue} on:input={(e) => adhesiveBaseThicknessValue.value = Number(e.target.value) || 0} />
-            </div>
-          </div>
-        </div>
+              <div class="grid gap-4 border-t pt-6">
+                <div class="text-[10px] font-bold uppercase tracking-widest text-blue-600/70">Presets</div>
+                <div class="flex flex-wrap gap-2">
+                  {[
+                    { label: 'Screws', mode: 'holes_all' },
+                    { label: 'Connectors', mode: 'connectors_edge' },
+                    { label: 'Chamfers', mode: 'chamfer_all' },
+                    { label: 'Clear', mode: 'clear_all' },
+                  ].map(({ label, mode }) => (
+                    <button class="bg-gray-100 text-gray-600 rounded-lg py-1.5 px-3 text-[10px] font-bold uppercase hover:bg-gray-200 transition tracking-tight" on:click={() => applyHelper(mode)}>{label}</button>
+                  ))}
+                </div>
+              </div>
 
-        <div class="grid gap-4 border-t pt-4">
-          <div class="text-sm font-semibold uppercase tracking-wider text-gray-500">Screw Hole Settings</div>
-          <div class="grid md:grid-cols-5 gap-4 items-end">
-            <div class="grid gap-1">
-              <label class="text-xs font-medium text-gray-600">Screw Diameter</label>
-              <input type="number" class="border rounded-lg h-9 px-2 text-sm" value={screwDiameterValue} on:input={(e) => screwDiameterValue.value = Number(e.target.value) || 0} />
-            </div>
-            <div class="grid gap-1">
-              <label class="text-xs font-medium text-gray-600">Head Diameter</label>
-              <input type="number" class="border rounded-lg h-9 px-2 text-sm" value={screwHeadDiameterValue} on:input={(e) => screwHeadDiameterValue.value = Number(e.target.value) || 0} />
-            </div>
-            <div class="grid gap-1">
-              <label class="text-xs font-medium text-gray-600">Head Inset</label>
-              <input type="number" class="border rounded-lg h-9 px-2 text-sm" value={screwHeadInsetValue} on:input={(e) => screwHeadInsetValue.value = Number(e.target.value) || 0} />
-            </div>
-            <label class="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" class="w-4 h-4 text-blue-600" attr:checked={screwHeadIsCountersunk} on:change={(e) => screwHeadIsCountersunk.value = e.target.checked} />
-              Countersunk
-            </label>
-            <div class="grid gap-1">
-              <label class="text-xs font-medium text-gray-600">Sink Degree</label>
-              <input type="number" class="border rounded-lg h-9 px-2 text-sm" value={screwHeadCountersunkDegreeValue} on:input={(e) => screwHeadCountersunkDegreeValue.value = Number(e.target.value) || 0} />
-            </div>
-          </div>
-        </div>
+              <div class="grid gap-4 border-t pt-6">
+                <div class="text-[10px] font-bold uppercase tracking-widest text-blue-600/70">Board Type</div>
+                <div class="flex gap-4">
+                  {['Full', 'Lite', 'Heavy'].map((v) => (
+                    <label class="flex items-center gap-2 cursor-pointer group">
+                      <input type="radio" class="w-4 h-4 text-blue-600 focus:ring-blue-500/20 border-gray-300" checked={fullOrLite.eq(v)} on:change={() => fullOrLite.value = v} />
+                      <span class="text-sm font-medium text-gray-600 group-hover:text-blue-600 transition">{v}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
 
-        <div class="grid gap-4 border-t pt-4">
-          <div class="text-sm font-semibold uppercase tracking-wider text-gray-500">Backside Screw Hole</div>
-          <div class="grid md:grid-cols-5 gap-4 items-end">
-            <label class="flex items-center gap-2 text-sm cursor-pointer col-span-2">
-              <input type="checkbox" class="w-4 h-4 text-blue-600" attr:checked={backsideScrewHole} on:change={(e) => backsideScrewHole.value = e.target.checked} />
-              Enable backside screw hole
-            </label>
-            <div class="grid gap-1">
-              <label class="text-xs font-medium text-gray-600">Head Shrink</label>
-              <input type="number" class="border rounded-lg h-9 px-2 text-sm" value={backsideScrewHeadDiameterShrinkValue} on:input={(e) => backsideScrewHeadDiameterShrinkValue.value = Number(e.target.value) || 0} />
-            </div>
-            <div class="grid gap-1">
-              <label class="text-xs font-medium text-gray-600">Head Inset</label>
-              <input type="number" class="border rounded-lg h-9 px-2 text-sm" value={backsideScrewHeadInsetValue} on:input={(e) => backsideScrewHeadInsetValue.value = Number(e.target.value) || 0} />
-            </div>
-            <label class="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" class="w-4 h-4 text-blue-600" attr:checked={backsideScrewHeadIsCountersunk} on:change={(e) => backsideScrewHeadIsCountersunk.value = e.target.checked} />
-              Backside countersunk
-            </label>
-          </div>
-        </div>
+              <div class="grid gap-4 border-t pt-6">
+                <div class="text-[10px] font-bold uppercase tracking-widest text-blue-600/70">Dimensions</div>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-3">
+                  {[
+                    { label: 'Tile Size', step: 1, sig: tileSizeValue },
+                    { label: 'Thickness', step: 0.1, sig: tileThicknessValue },
+                    { label: 'Lite Thk', step: 0.1, sig: liteTileThicknessValue },
+                    { label: 'Heavy Thk', step: 0.1, sig: heavyTileThicknessValue },
+                    { label: 'Heavy Gap', step: 0.1, sig: heavyTileGapValue }
+                  ].map(({ label, sig, step }) => (
+                    <div class="grid gap-1">
+                      <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{label}</label>
+                      <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" step={step} value={sig} on:input={(e) => sig.value = Number(e.target.value) || 0} />
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-        <div class="grid gap-4 border-t pt-4">
-          <div class="text-sm font-semibold uppercase tracking-wider text-gray-500">Stacking & Quality</div>
-          <div class="grid md:grid-cols-5 gap-4 items-end">
-            <div class="grid gap-1">
-              <label class="text-xs font-medium text-gray-600">Stack Count</label>
-              <input type="number" class="border rounded-lg h-9 px-2 text-sm" value={stackCountValue} on:input={(e) => stackCountValue.value = Number(e.target.value) || 0} />
-            </div>
-            <div class="grid gap-1">
-              <label class="text-xs font-medium text-gray-600">Method</label>
-              <select class="border rounded-lg h-9 px-2 text-sm bg-white" value={stackingMethod} on:change={(e) => stackingMethod.value = e.target.value}>
-                <option>Interface Layer</option>
-                <option>Ironing - BETA</option>
-              </select>
-            </div>
-            <div class="grid gap-1">
-              <label class="text-xs font-medium text-gray-600">Interface Thk</label>
-              <input type="number" class="border rounded-lg h-9 px-2 text-sm" value={interfaceThicknessValue} on:input={(e) => interfaceThicknessValue.value = Number(e.target.value) || 0} />
-            </div>
-            <div class="grid gap-1">
-              <label class="text-xs font-medium text-gray-600">Separation</label>
-              <input type="number" class="border rounded-lg h-9 px-2 text-sm" value={interfaceSeparationValue} on:input={(e) => interfaceSeparationValue.value = Number(e.target.value) || 0} />
-            </div>
-            <div class="grid gap-1">
-              <label class="text-xs font-medium text-gray-600">Segments</label>
-              <input type="number" class="border rounded-lg h-9 px-2 text-sm" value={circleSegmentsValue} on:input={(e) => circleSegmentsValue.value = Number(e.target.value) || 0} />
-            </div>
-          </div>
-        </div>
+              <div class="grid gap-4 border-t pt-6">
+                <div class="text-[10px] font-bold uppercase tracking-widest text-blue-600/70">Screws</div>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-3">
+                  {[
+                    { label: 'Screw Diameter', step: 0.1, sig: screwDiameterValue },
+                    { label: 'Head Diameter', step: 0.1, sig: screwHeadDiameterValue },
+                    { label: 'Head Inset', step: 0.1, sig: screwHeadInsetValue },
+                    { label: 'Sink Deg', step: 0.1, sig: screwHeadCountersunkDegreeValue },
+                  ].map(({ label, sig }) => (
+                    <div class="grid gap-1">
+                      <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{label}</label>
+                      <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" step={step} value={sig} on:input={(e) => sig.value = Number(e.target.value) || 0} />
+                    </div>
+                  ))}
+                </div>
+                <label class="flex items-center gap-2 text-sm font-medium text-gray-600 cursor-pointer">
+                  <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20" checked={screwHeadIsCountersunk} on:change={(e) => screwHeadIsCountersunk.value = e.target.checked} />
+                  Countersunk
+                </label>
+              </div>
 
-        <div class="grid gap-4 border-t pt-4">
-          <div class="text-sm font-semibold uppercase tracking-wider text-gray-500">Presets</div>
-          <div class="flex flex-wrap gap-2">
-            {[
-              { label: 'Screws Everywhere', mode: 'holes_all' },
-              { label: 'Edge Connectors', mode: 'connectors_edge' },
-              { label: 'Chamfer All', mode: 'chamfer_all' },
-              { label: 'Clear Features', mode: 'clear_all' },
-            ].map(({ label, mode }) => (
-              <button class="bg-gray-100 text-gray-700 rounded-lg py-2 px-4 text-sm font-medium hover:bg-gray-200 transition" on:click={() => applyHelper(mode)}>{label}</button>
-            ))}
+
+
+              <If condition={fullOrLite.eq('Lite')}>{() => (
+                <div class="grid gap-4 border-t pt-6">
+                  <div class="text-[10px] font-bold uppercase tracking-widest text-blue-600/70">Adhesive Base</div>
+                  <label class="flex items-center gap-2 text-sm font-medium text-gray-600 cursor-pointer">
+                    <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20" checked={addAdhesiveBase} on:change={(e) => addAdhesiveBase.value = e.target.checked} />
+                    Enable base
+                  </label>
+                  <div class="grid gap-1">
+                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Thickness</label>
+                    <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" value={adhesiveBaseThicknessValue} on:input={(e) => adhesiveBaseThicknessValue.value = Number(e.target.value) || 0} />
+                  </div>
+                </div>
+              )}{() => (
+                <div class="grid gap-4 border-t pt-6">
+                  <div class="text-[10px] font-bold uppercase tracking-widest text-blue-600/70">Backside Screws</div>
+                  <label class="flex items-center gap-2 text-sm font-medium text-gray-600 cursor-pointer">
+                    <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20" checked={backsideScrewHole} on:change={(e) => backsideScrewHole.value = e.target.checked} />
+                    Enable backside
+                  </label>
+                  <div class="grid grid-cols-2 gap-x-4 gap-y-3">
+                    {[
+                      { label: 'Head Shrink', step: 0.1, sig: backsideScrewHeadDiameterShrinkValue },
+                      { label: 'Head Inset', step: 0.1, sig: backsideScrewHeadInsetValue },
+                    ].map(({ label, sig }) => (
+                      <div class="grid gap-1">
+                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{label}</label>
+                        <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" step={step} value={sig} on:input={(e) => sig.value = Number(e.target.value) || 0} />
+                      </div>
+                    ))}
+                  </div>
+                  <label class="flex items-center gap-2 text-sm font-medium text-gray-600 cursor-pointer">
+                    <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20" checked={backsideScrewHeadIsCountersunk} on:change={(e) => backsideScrewHeadIsCountersunk.value = e.target.checked} />
+                    Backside countersunk
+                  </label>
+                </div>
+              )}</If>
+
+              <div class="grid gap-4 border-t pt-4">
+                <div class="text-sm font-semibold uppercase tracking-wider text-gray-500">Stacking</div>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <div class="grid gap-1">
+                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Stack Count</label>
+                    <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" value={stackCountValue} on:input={(e) => stackCountValue.value = Number(e.target.value) || 0} />
+                  </div>
+                  <div class="grid gap-1">
+                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Method</label>
+                    <select class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full bg-white" value={stackingMethod} on:change={(e) => stackingMethod.value = e.target.value}>
+                      <option>Interface Layer</option>
+                      <option>Ironing - BETA</option>
+                    </select>
+                  </div>
+                  <div class="grid gap-1">
+                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Interface Thickness</label>
+                    <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" step={0.1} value={interfaceThicknessValue} on:input={(e) => interfaceThicknessValue.value = Number(e.target.value) || 0} />
+                  </div>
+                  <div class="grid gap-1">
+                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Separation</label>
+                    <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" step={0.1} value={interfaceSeparationValue} on:input={(e) => interfaceSeparationValue.value = Number(e.target.value) || 0} />
+                  </div>
+                </div>
+              </div>
+
+              <div class="grid gap-4 border-t pt-4">
+                <div class="text-sm font-semibold uppercase tracking-wider text-gray-500">Quality</div>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <div class="grid gap-1">
+                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Segments</label>
+                    <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" value={circleSegmentsValue} on:input={(e) => circleSegmentsValue.value = Number(e.target.value) || 0} />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="bg-white rounded-2xl shadow-sm border p-6 grid gap-4">
-        <div class="flex justify-between items-center">
-          <h2 class="text-lg font-bold">Export Entry SCAD</h2>
+      {/* Right: Preview Area */}
+      <div class="flex-1 flex flex-col h-full bg-white relative">
+        {/* Title Bar */}
+        <div class="h-16 border-b flex items-center justify-between px-8 bg-white z-20 shadow-sm">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-black text-xl shadow-lg shadow-blue-500/30">G</div>
+            <h1 class="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600">openGrid Studio</h1>
+          </div>
           <div class="flex gap-2">
-            <button class="bg-gray-100 text-gray-700 rounded-lg py-2 px-4 text-sm font-medium hover:bg-gray-200 transition" on:click={() => maskGrid.value = clearNonTileBits(maskGrid.value)}>Clear Features</button>
-            <button class="bg-blue-600 text-white rounded-lg py-2 px-4 text-sm font-medium hover:bg-blue-700 transition" on:click={copy}>Copy SCAD</button>
+            <button class="bg-white border-2 border-gray-200 text-gray-700 rounded-xl h-10 px-6 text-sm font-bold hover:border-gray-300 transition flex items-center gap-2" on:click={copy}>
+              Copy SCAD
+            </button>
+            <button class="bg-blue-600 text-white rounded-xl h-10 px-8 text-sm font-bold hover:bg-blue-700 transition flex items-center gap-2 shadow-lg shadow-blue-600/20" on:click={downloadScad}>
+              Download .scad
+            </button>
           </div>
         </div>
-        <textarea readonly class="w-full h-64 border rounded-xl p-4 font-mono text-xs bg-gray-50" value={exportText} />
+
+        {/* Editor Surface */}
+        <div class="flex-1 overflow-auto p-12 flex flex-col items-center bg-gray-50/50 relative scrollbar-hide">
+          <div class="flex flex-col items-center gap-6 m-auto">
+            <ResizeButtons onPlus={() => updateSize(width.value, height.value + 1, 0, 1)} onMinus={() => updateSize(width.value, height.value - 1, 0, -1)} />
+            <div class="flex items-center gap-6">
+              <ResizeButtons vertical onPlus={() => updateSize(width.value + 1, height.value, 1, 0)} onMinus={() => updateSize(width.value - 1, height.value, -1, 0)} />
+              <div class="bg-white rounded-2xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-gray-100 flex items-center justify-center">
+                <svg attr:width={svgW} attr:height={svgH} class="rounded-lg border border-gray-100 bg-white">
+                  <rect attr:x={pad} attr:y={pad} attr:width={boardW} attr:height={boardH} attr:fill="#000" />
+
+                  <For entries={tiles} track="id">
+                    {({ item: { tx, ty, gx, gy } }) => {
+                      const active = $(() => tileFill(read(getMask(maskGrid.value, gx, gy))));
+                      return (
+                        <If condition={$(() => !active.value)}>
+                          {() => (
+                            <rect
+                              attr:x={pad + tx * tileSize} attr:y={pad + ty * tileSize}
+                              attr:width={tileSize} attr:height={tileSize}
+                              attr:fill="#fff"
+                            />
+                          )}
+                        </If>
+                      );
+                    }}
+                  </For>
+
+                  <For entries={tiles} track="id">
+                    {({ item: { tx, ty, gx, gy } }) => {
+                      const active = $(() => tileFill(read(getMask(maskGrid.value, gx, gy))));
+                      const x = pad + tx * tileSize + half;
+                      const y = pad + ty * tileSize + half;
+                      const sq = squareTile(x, y, tileSize);
+                      const border = 3;
+
+                      return (
+                        <If condition={active}>
+                          {() => (
+                            <g>
+                              <rect attr:x={sq.x} attr:y={sq.y} attr:width={sq.w} attr:height={sq.h} attr:fill="#000" />
+                              <rect attr:x={sq.x + border} attr:y={sq.y + border} attr:width={sq.w - border * 2} attr:height={sq.h - border * 2} attr:fill="#2563eb" />
+                            </g>
+                          )}
+                        </If>
+                      );
+                    }}
+                  </For>
+
+                  <For entries={nodes} track="id">
+                    {({ item: { gx, gy } }) => {
+                      const { x, y } = toNodeXY(gx, gy);
+                      const kind = $(() => topo.value.nodeKind[gy]?.[gx] ?? 'none');
+                      const dir = $(() => topo.value.nodeDir[gy]?.[gx] ?? null);
+                      const state = $(() => nodeState(kind.value, getMask(maskGrid.value, gx, gy)));
+                      return (
+                        <g>
+                          <NodeGlyph kind={kind} state={state} x={x} y={y} dir={dir} />
+                        </g>
+                      );
+                    }}
+                  </For>
+
+                  <For entries={tiles} track="id">
+                    {({ item: { tx, ty, gx, gy } }) => (
+                      <rect
+                        attr:x={pad + tx * tileSize} attr:y={pad + ty * tileSize}
+                        attr:width={tileSize} attr:height={tileSize}
+                        attr:fill="transparent" on:click={() => toggleTile(gx, gy)} style="cursor: pointer"
+                      />
+                    )}
+                  </For>
+
+                  <For entries={nodes} track="id">
+                    {({ item: { gx, gy } }) => {
+                      const { x, y } = toNodeXY(gx, gy);
+                      return (
+                        <circle attr:cx={x} attr:cy={y} attr:r={20} attr:fill="transparent" on:click={() => cycleNode(gx, gy)} style="cursor: pointer" />
+                      );
+                    }}
+                  </For>
+                </svg>
+              </div>
+              <ResizeButtons vertical onPlus={() => updateSize(width.value + 1, height.value)} onMinus={() => updateSize(width.value - 1, height.value)} />
+            </div>
+            <ResizeButtons onPlus={() => updateSize(width.value, height.value + 1)} onMinus={() => updateSize(width.value, height.value - 1)} />
+          </div>
+        </div>
       </div>
+
+      {/* Copy Modal */}
+      <If condition={showModal}>
+        {() => (
+          <div class="fixed inset-0 z-[100] flex items-center justify-center p-8">
+            <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" on:click={() => showModal.value = false}></div>
+            <div class="bg-white rounded-3xl w-full max-w-2xl flex flex-col shadow-2xl overflow-hidden relative animate-in fade-in zoom-in duration-200">
+              <div class="p-6 border-b flex justify-between items-center">
+                <h3 class="text-xl font-bold text-gray-900">Copy SCAD Code</h3>
+                <button class="text-gray-400 hover:text-gray-600 transition" on:click={() => showModal.value = false}>
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+              </div>
+              <div class="p-6 bg-gray-50">
+                <textarea 
+                  readonly 
+                  class="w-full h-80 border rounded-xl p-4 font-mono text-[10px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition leading-tight resize-none" 
+                  $ref={(el) => { if (el) { el.select(); } }}
+                  value={exportText} 
+                />
+              </div>
+              <div class="p-6 border-t flex justify-end gap-3">
+                <button class="bg-gray-100 text-gray-700 rounded-xl px-6 h-11 font-bold hover:bg-gray-200 transition" on:click={() => showModal.value = false}>Close</button>
+                <button 
+                  class="bg-blue-600 text-white rounded-xl px-8 h-11 font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-600/20" 
+                  on:click={async () => {
+                    await navigator.clipboard.writeText(exportText.value);
+                    showModal.value = false;
+                  }}
+                >
+                  Copy to Clipboard
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </If>
     </div>
   );
 }

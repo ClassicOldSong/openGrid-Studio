@@ -3,7 +3,7 @@ openGrid mask-driven generator module
 
 Usage from a JS-generated entry SCAD:
 
-use <opengrid-generator.scad>
+use <opengrid_generator.scad>
 
 mask = [
   [5,1,1,1,1,1,4],
