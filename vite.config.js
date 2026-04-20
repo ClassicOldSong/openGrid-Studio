@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite'
+import tailwindcss from '@tailwindcss/vite'
 import { refurbish } from 'refurbish/vite'
 
 export default defineConfig({
-	plugins: [refurbish()].filter(Boolean),
+	plugins: [tailwindcss(), refurbish()].filter(Boolean),
 	esbuild: {
 		jsx: 'automatic',
 		jsxImportSource: 'refui',

@@ -809,7 +809,7 @@ export default function App() {
                     { label: 'Head Diameter', step: 0.1, sig: screwHeadDiameterValue },
                     { label: 'Head Inset', step: 0.1, sig: screwHeadInsetValue },
                     { label: 'Sink Deg', step: 0.1, sig: screwHeadCountersunkDegreeValue },
-                  ].map(({ label, sig }) => (
+                  ].map(({ label, sig, step }) => (
                     <div class="grid gap-1">
                       <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{label}</label>
                       <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" step={step} value={sig} on:input={(e) => sig.value = Number(e.target.value) || 0} />
@@ -847,7 +847,7 @@ export default function App() {
                     {[
                       { label: 'Head Shrink', step: 0.1, sig: backsideScrewHeadDiameterShrinkValue },
                       { label: 'Head Inset', step: 0.1, sig: backsideScrewHeadInsetValue },
-                    ].map(({ label, sig }) => (
+                    ].map(({ label, sig, step }) => (
                       <div class="grid gap-1">
                         <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{label}</label>
                         <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" step={step} value={sig} on:input={(e) => sig.value = Number(e.target.value) || 0} />
@@ -906,7 +906,7 @@ export default function App() {
         <div class="h-16 border-b flex items-center justify-between px-8 bg-white z-20 shadow-sm">
           <div class="flex items-center gap-3">
             <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-black text-xl shadow-lg shadow-blue-500/30">G</div>
-            <h1 class="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600">openGrid Studio</h1>
+            <h1 class="text-lg font-bold bg-clip-text bg-gradient-to-r from-gray-900 to-gray-600">openGrid Studio</h1>
           </div>
           <div class="flex gap-2">
             <button class="bg-white border-2 border-gray-200 text-gray-700 rounded-xl h-10 px-6 text-sm font-bold hover:border-gray-300 transition flex items-center gap-2" on:click={copy}>
@@ -1012,7 +1012,7 @@ export default function App() {
         {() => (
           <div class="fixed inset-0 z-[100] flex items-center justify-center p-8">
             <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" on:click={() => showModal.value = false}></div>
-            <div class="bg-white rounded-3xl w-full max-w-2xl flex flex-col shadow-2xl overflow-hidden relative animate-in fade-in zoom-in duration-200">
+            <div class="bg-white rounded-3xl w-full max-w-2xl flex flex-col shadow-2xl overflow-hidden relative animate-modal-in">
               <div class="p-6 border-b flex justify-between items-center">
                 <h3 class="text-xl font-bold text-gray-900">Copy SCAD Code</h3>
                 <button class="text-gray-400 hover:text-gray-600 transition" on:click={() => showModal.value = false}>
