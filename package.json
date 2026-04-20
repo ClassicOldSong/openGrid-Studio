@@ -1,0 +1,26 @@
+{
+  "name": "opengrid-editor",
+  "version": "1.0.0",
+  "description": "",
+  "keywords": [
+    "opengrid",
+    "generator"
+  ],
+  "license": "Apache-2.0",
+  "author": "Yukino Song <yukino@sudomaker.com>",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "refui": "^0.17.1"
+  },
+  "devDependencies": {
+    "refurbish": "^0.1.8",
+    "vite": "^8.0.9"
+  }
+}
