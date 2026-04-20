@@ -9,6 +9,37 @@ const BITS = {
 };
 
 const STORAGE_KEY = 'opengrid-mask-editor-config-v2';
+const DEFAULT_CONFIG = {
+  themeMode: 'auto',
+  fullOrLite: 'Full',
+  tileSizeValue: 28,
+  tileThicknessValue: 6.8,
+  liteTileThicknessValue: 4,
+  heavyTileThicknessValue: 13.8,
+  heavyTileGapValue: 0.2,
+  addAdhesiveBase: false,
+  adhesiveBaseThicknessValue: 0.6,
+  screwDiameterValue: 4.1,
+  screwHeadDiameterValue: 7.2,
+  screwHeadInsetValue: 1,
+  screwHeadIsCountersunk: true,
+  screwHeadCountersunkDegreeValue: 90,
+  backsideScrewHole: true,
+  backsideScrewHeadDiameterShrinkValue: 0,
+  backsideScrewHeadInsetValue: 1,
+  backsideScrewHeadIsCountersunk: true,
+  backsideScrewHeadCountersunkDegreeValue: 90,
+  stackCountValue: 1,
+  stackingMethod: 'Interface Layer',
+  interfaceThicknessValue: 0.4,
+  interfaceSeparationValue: 0.1,
+  circleSegmentsValue: 64,
+  width: 4,
+  height: 4,
+  top1Text: '0',
+  top2Text: '0',
+  maskGrid: buildRectangleMask(4, 4),
+};
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
@@ -471,108 +502,148 @@ const NodeGlyph = ({ kind, state, x, y, dir }) => {
 }
 
 export default function App() {
-  const fullOrLite = signal('Full');
-  const tileSizeValue = signal(28);
-  const tileThicknessValue = signal(6.8);
-  const liteTileThicknessValue = signal(4);
-  const heavyTileThicknessValue = signal(13.8);
-  const heavyTileGapValue = signal(0.2);
-  const addAdhesiveBase = signal(false);
-  const adhesiveBaseThicknessValue = signal(0.6);
-  const screwDiameterValue = signal(4.1);
-  const screwHeadDiameterValue = signal(7.2);
-  const screwHeadInsetValue = signal(1);
-  const screwHeadIsCountersunk = signal(true);
-  const screwHeadCountersunkDegreeValue = signal(90);
-  const backsideScrewHole = signal(true);
-  const backsideScrewHeadDiameterShrinkValue = signal(0);
-  const backsideScrewHeadInsetValue = signal(1);
-  const backsideScrewHeadIsCountersunk = signal(true);
-  const backsideScrewHeadCountersunkDegreeValue = signal(90);
-  const stackCountValue = signal(1);
-  const stackingMethod = signal('Interface Layer');
-  const interfaceThicknessValue = signal(0.4);
-  const interfaceSeparationValue = signal(0.1);
-  const circleSegmentsValue = signal(64);
-  const width = signal(4);
-  const height = signal(4);
-  const top1Text = signal('0');
-  const top2Text = signal('0');
-  const maskGrid = signal(buildRectangleMask(4, 4));
+  const themeMode = signal(DEFAULT_CONFIG.themeMode);
+  const systemPrefersDark = signal(false);
+  const fullOrLite = signal(DEFAULT_CONFIG.fullOrLite);
+  const tileSizeValue = signal(DEFAULT_CONFIG.tileSizeValue);
+  const tileThicknessValue = signal(DEFAULT_CONFIG.tileThicknessValue);
+  const liteTileThicknessValue = signal(DEFAULT_CONFIG.liteTileThicknessValue);
+  const heavyTileThicknessValue = signal(DEFAULT_CONFIG.heavyTileThicknessValue);
+  const heavyTileGapValue = signal(DEFAULT_CONFIG.heavyTileGapValue);
+  const addAdhesiveBase = signal(DEFAULT_CONFIG.addAdhesiveBase);
+  const adhesiveBaseThicknessValue = signal(DEFAULT_CONFIG.adhesiveBaseThicknessValue);
+  const screwDiameterValue = signal(DEFAULT_CONFIG.screwDiameterValue);
+  const screwHeadDiameterValue = signal(DEFAULT_CONFIG.screwHeadDiameterValue);
+  const screwHeadInsetValue = signal(DEFAULT_CONFIG.screwHeadInsetValue);
+  const screwHeadIsCountersunk = signal(DEFAULT_CONFIG.screwHeadIsCountersunk);
+  const screwHeadCountersunkDegreeValue = signal(DEFAULT_CONFIG.screwHeadCountersunkDegreeValue);
+  const backsideScrewHole = signal(DEFAULT_CONFIG.backsideScrewHole);
+  const backsideScrewHeadDiameterShrinkValue = signal(DEFAULT_CONFIG.backsideScrewHeadDiameterShrinkValue);
+  const backsideScrewHeadInsetValue = signal(DEFAULT_CONFIG.backsideScrewHeadInsetValue);
+  const backsideScrewHeadIsCountersunk = signal(DEFAULT_CONFIG.backsideScrewHeadIsCountersunk);
+  const backsideScrewHeadCountersunkDegreeValue = signal(DEFAULT_CONFIG.backsideScrewHeadCountersunkDegreeValue);
+  const stackCountValue = signal(DEFAULT_CONFIG.stackCountValue);
+  const stackingMethod = signal(DEFAULT_CONFIG.stackingMethod);
+  const interfaceThicknessValue = signal(DEFAULT_CONFIG.interfaceThicknessValue);
+  const interfaceSeparationValue = signal(DEFAULT_CONFIG.interfaceSeparationValue);
+  const circleSegmentsValue = signal(DEFAULT_CONFIG.circleSegmentsValue);
+  const width = signal(DEFAULT_CONFIG.width);
+  const height = signal(DEFAULT_CONFIG.height);
+  const top1Text = signal(DEFAULT_CONFIG.top1Text);
+  const top2Text = signal(DEFAULT_CONFIG.top2Text);
+  const maskGrid = signal(cloneGrid(DEFAULT_CONFIG.maskGrid));
 
   const showModal = signal(false);
+  let persistConfig = true;
+
+  const applyConfig = (config) => {
+    themeMode.value = config.themeMode ?? DEFAULT_CONFIG.themeMode;
+    fullOrLite.value = config.fullOrLite ?? DEFAULT_CONFIG.fullOrLite;
+    tileSizeValue.value = config.tileSizeValue ?? DEFAULT_CONFIG.tileSizeValue;
+    tileThicknessValue.value = config.tileThicknessValue ?? DEFAULT_CONFIG.tileThicknessValue;
+    liteTileThicknessValue.value = config.liteTileThicknessValue ?? DEFAULT_CONFIG.liteTileThicknessValue;
+    heavyTileThicknessValue.value = config.heavyTileThicknessValue ?? DEFAULT_CONFIG.heavyTileThicknessValue;
+    heavyTileGapValue.value = config.heavyTileGapValue ?? DEFAULT_CONFIG.heavyTileGapValue;
+    addAdhesiveBase.value = config.addAdhesiveBase ?? DEFAULT_CONFIG.addAdhesiveBase;
+    adhesiveBaseThicknessValue.value = config.adhesiveBaseThicknessValue ?? DEFAULT_CONFIG.adhesiveBaseThicknessValue;
+    screwDiameterValue.value = config.screwDiameterValue ?? DEFAULT_CONFIG.screwDiameterValue;
+    screwHeadDiameterValue.value = config.screwHeadDiameterValue ?? DEFAULT_CONFIG.screwHeadDiameterValue;
+    screwHeadInsetValue.value = config.screwHeadInsetValue ?? DEFAULT_CONFIG.screwHeadInsetValue;
+    screwHeadIsCountersunk.value = config.screwHeadIsCountersunk ?? DEFAULT_CONFIG.screwHeadIsCountersunk;
+    screwHeadCountersunkDegreeValue.value = config.screwHeadCountersunkDegreeValue ?? DEFAULT_CONFIG.screwHeadCountersunkDegreeValue;
+    backsideScrewHole.value = config.backsideScrewHole ?? DEFAULT_CONFIG.backsideScrewHole;
+    backsideScrewHeadDiameterShrinkValue.value = config.backsideScrewHeadDiameterShrinkValue ?? DEFAULT_CONFIG.backsideScrewHeadDiameterShrinkValue;
+    backsideScrewHeadInsetValue.value = config.backsideScrewHeadInsetValue ?? DEFAULT_CONFIG.backsideScrewHeadInsetValue;
+    backsideScrewHeadIsCountersunk.value = config.backsideScrewHeadIsCountersunk ?? DEFAULT_CONFIG.backsideScrewHeadIsCountersunk;
+    backsideScrewHeadCountersunkDegreeValue.value = config.backsideScrewHeadCountersunkDegreeValue ?? DEFAULT_CONFIG.backsideScrewHeadCountersunkDegreeValue;
+    stackCountValue.value = config.stackCountValue ?? DEFAULT_CONFIG.stackCountValue;
+    stackingMethod.value = config.stackingMethod ?? DEFAULT_CONFIG.stackingMethod;
+    interfaceThicknessValue.value = config.interfaceThicknessValue ?? DEFAULT_CONFIG.interfaceThicknessValue;
+    interfaceSeparationValue.value = config.interfaceSeparationValue ?? DEFAULT_CONFIG.interfaceSeparationValue;
+    circleSegmentsValue.value = config.circleSegmentsValue ?? DEFAULT_CONFIG.circleSegmentsValue;
+    width.value = config.width ?? DEFAULT_CONFIG.width;
+    height.value = config.height ?? DEFAULT_CONFIG.height;
+    top1Text.value = config.top1Text ?? DEFAULT_CONFIG.top1Text;
+    top2Text.value = config.top2Text ?? DEFAULT_CONFIG.top2Text;
+    maskGrid.value = cloneGrid(config.maskGrid ?? DEFAULT_CONFIG.maskGrid);
+  };
+
+  const getConfigState = () => ({
+    themeMode: themeMode.value,
+    fullOrLite: fullOrLite.value,
+    tileSizeValue: tileSizeValue.value,
+    tileThicknessValue: tileThicknessValue.value,
+    liteTileThicknessValue: liteTileThicknessValue.value,
+    heavyTileThicknessValue: heavyTileThicknessValue.value,
+    heavyTileGapValue: heavyTileGapValue.value,
+    addAdhesiveBase: addAdhesiveBase.value,
+    adhesiveBaseThicknessValue: adhesiveBaseThicknessValue.value,
+    screwDiameterValue: screwDiameterValue.value,
+    screwHeadDiameterValue: screwHeadDiameterValue.value,
+    screwHeadInsetValue: screwHeadInsetValue.value,
+    screwHeadIsCountersunk: screwHeadIsCountersunk.value,
+    screwHeadCountersunkDegreeValue: screwHeadCountersunkDegreeValue.value,
+    backsideScrewHole: backsideScrewHole.value,
+    backsideScrewHeadDiameterShrinkValue: backsideScrewHeadDiameterShrinkValue.value,
+    backsideScrewHeadInsetValue: backsideScrewHeadInsetValue.value,
+    backsideScrewHeadIsCountersunk: backsideScrewHeadIsCountersunk.value,
+    backsideScrewHeadCountersunkDegreeValue: backsideScrewHeadCountersunkDegreeValue.value,
+    stackCountValue: stackCountValue.value,
+    stackingMethod: stackingMethod.value,
+    interfaceThicknessValue: interfaceThicknessValue.value,
+    interfaceSeparationValue: interfaceSeparationValue.value,
+    circleSegmentsValue: circleSegmentsValue.value,
+    width: width.value,
+    height: height.value,
+    top1Text: top1Text.value,
+    top2Text: top2Text.value,
+    maskGrid: maskGrid.value,
+  });
+
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    systemPrefersDark.value = media.matches;
+    const onChange = (event) => {
+      systemPrefersDark.value = event.matches;
+    };
+    if (media.addEventListener) media.addEventListener('change', onChange);
+    else media.addListener(onChange);
+    onDispose(() => {
+      if (media.removeEventListener) media.removeEventListener('change', onChange);
+      else media.removeListener(onChange);
+    });
+  }
 
   // Load from local storage
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const saved = JSON.parse(raw);
-      if (saved) {
-        if (saved.fullOrLite) fullOrLite.value = saved.fullOrLite;
-        if (saved.tileSizeValue !== undefined) tileSizeValue.value = saved.tileSizeValue;
-        if (saved.tileThicknessValue !== undefined) tileThicknessValue.value = saved.tileThicknessValue;
-        if (saved.liteTileThicknessValue !== undefined) liteTileThicknessValue.value = saved.liteTileThicknessValue;
-        if (saved.heavyTileThicknessValue !== undefined) heavyTileThicknessValue.value = saved.heavyTileThicknessValue;
-        if (saved.heavyTileGapValue !== undefined) heavyTileGapValue.value = saved.heavyTileGapValue;
-        if (saved.addAdhesiveBase !== undefined) addAdhesiveBase.value = saved.addAdhesiveBase;
-        if (saved.adhesiveBaseThicknessValue !== undefined) adhesiveBaseThicknessValue.value = saved.adhesiveBaseThicknessValue;
-        if (saved.screwDiameterValue !== undefined) screwDiameterValue.value = saved.screwDiameterValue;
-        if (saved.screwHeadDiameterValue !== undefined) screwHeadDiameterValue.value = saved.screwHeadDiameterValue;
-        if (saved.screwHeadInsetValue !== undefined) screwHeadInsetValue.value = saved.screwHeadInsetValue;
-        if (saved.screwHeadIsCountersunk !== undefined) screwHeadIsCountersunk.value = saved.screwHeadIsCountersunk;
-        if (saved.screwHeadCountersunkDegreeValue !== undefined) screwHeadCountersunkDegreeValue.value = saved.screwHeadCountersunkDegreeValue;
-        if (saved.backsideScrewHole !== undefined) backsideScrewHole.value = saved.backsideScrewHole;
-        if (saved.backsideScrewHeadDiameterShrinkValue !== undefined) backsideScrewHeadDiameterShrinkValue.value = saved.backsideScrewHeadDiameterShrinkValue;
-        if (saved.backsideScrewHeadInsetValue !== undefined) backsideScrewHeadInsetValue.value = saved.backsideScrewHeadInsetValue;
-        if (saved.backsideScrewHeadIsCountersunk !== undefined) backsideScrewHeadIsCountersunk.value = saved.backsideScrewHeadIsCountersunk;
-        if (saved.backsideScrewHeadCountersunkDegreeValue !== undefined) backsideScrewHeadCountersunkDegreeValue.value = saved.backsideScrewHeadCountersunkDegreeValue;
-        if (saved.stackCountValue !== undefined) stackCountValue.value = saved.stackCountValue;
-        if (saved.stackingMethod) stackingMethod.value = saved.stackingMethod;
-        if (saved.interfaceThicknessValue !== undefined) interfaceThicknessValue.value = saved.interfaceThicknessValue;
-        if (saved.interfaceSeparationValue !== undefined) interfaceSeparationValue.value = saved.interfaceSeparationValue;
-        if (saved.circleSegmentsValue !== undefined) circleSegmentsValue.value = saved.circleSegmentsValue;
-        if (saved.width) width.value = saved.width;
-        if (saved.height) height.value = saved.height;
-        if (saved.top1Text) top1Text.value = saved.top1Text;
-        if (saved.top2Text) top2Text.value = saved.top2Text;
-        if (saved.maskGrid) maskGrid.value = saved.maskGrid;
-      }
+      if (saved) applyConfig({
+        ...DEFAULT_CONFIG,
+        ...saved,
+        themeMode: saved.themeMode ?? (saved.theme === 'light' || saved.theme === 'dark' ? saved.theme : DEFAULT_CONFIG.themeMode),
+      });
     }
   } catch (e) { }
 
   // Save to local storage
   watch(() => {
-    const state = {
-      fullOrLite: fullOrLite.value,
-      tileSizeValue: tileSizeValue.value,
-      tileThicknessValue: tileThicknessValue.value,
-      liteTileThicknessValue: liteTileThicknessValue.value,
-      heavyTileThicknessValue: heavyTileThicknessValue.value,
-      heavyTileGapValue: heavyTileGapValue.value,
-      addAdhesiveBase: addAdhesiveBase.value,
-      adhesiveBaseThicknessValue: adhesiveBaseThicknessValue.value,
-      screwDiameterValue: screwDiameterValue.value,
-      screwHeadDiameterValue: screwHeadDiameterValue.value,
-      screwHeadInsetValue: screwHeadInsetValue.value,
-      screwHeadIsCountersunk: screwHeadIsCountersunk.value,
-      screwHeadCountersunkDegreeValue: screwHeadCountersunkDegreeValue.value,
-      backsideScrewHole: backsideScrewHole.value,
-      backsideScrewHeadDiameterShrinkValue: backsideScrewHeadDiameterShrinkValue.value,
-      backsideScrewHeadInsetValue: backsideScrewHeadInsetValue.value,
-      backsideScrewHeadIsCountersunk: backsideScrewHeadIsCountersunk.value,
-      backsideScrewHeadCountersunkDegreeValue: backsideScrewHeadCountersunkDegreeValue.value,
-      stackCountValue: stackCountValue.value,
-      stackingMethod: stackingMethod.value,
-      interfaceThicknessValue: interfaceThicknessValue.value,
-      interfaceSeparationValue: interfaceSeparationValue.value,
-      circleSegmentsValue: circleSegmentsValue.value,
-      width: width.value,
-      height: height.value,
-      top1Text: top1Text.value,
-      top2Text: top2Text.value,
-      maskGrid: maskGrid.value,
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (!persistConfig) return;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(getConfigState()));
+  });
+
+  const resolvedTheme = $(() => {
+    if (themeMode.value === 'auto') return systemPrefersDark.value ? 'dark' : 'light';
+    return themeMode.value;
+  });
+
+  watch(() => {
+    if (typeof document !== 'undefined') {
+      const isDark = resolvedTheme.value === 'dark';
+      document.documentElement.classList.toggle('dark', isDark);
+      document.documentElement.style.colorScheme = resolvedTheme.value;
+    }
   });
 
   const topo = $(() => deriveTopology(maskGrid.value, width.value, height.value));
@@ -668,6 +739,15 @@ export default function App() {
     document.body.removeChild(element);
   };
 
+  const clearConfiguration = () => {
+    persistConfig = false;
+    localStorage.removeItem(STORAGE_KEY);
+    applyConfig(DEFAULT_CONFIG);
+    queueMicrotask(() => {
+      persistConfig = true;
+    });
+  };
+
   const tileSize = 56;
   const step = tileSize / 2;
   const pad = 32;
@@ -712,53 +792,77 @@ export default function App() {
     return items;
   });
 
+  const inputClass = 'border border-gray-200 rounded-lg h-9 px-3 text-sm text-gray-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-400/20';
+  const compactInputClass = 'border border-gray-200 rounded-lg h-8 px-2 text-xs text-gray-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-400/20';
+  const sectionClass = 'grid gap-4 border-t border-gray-200 pt-6 dark:border-slate-800';
+  const sectionTitleClass = 'text-[10px] font-bold uppercase tracking-widest text-blue-600/70 dark:text-blue-300/80';
+  const fieldLabelClass = 'text-[10px] font-bold text-gray-400 uppercase tracking-tighter dark:text-slate-500';
+  const formLabelClass = 'text-xs font-medium text-gray-500 dark:text-slate-400';
+  const toggleLabelClass = 'flex items-center gap-2 text-sm font-medium text-gray-600 cursor-pointer dark:text-slate-300';
+  const chipButtonClass = 'bg-gray-100 text-gray-600 rounded-lg py-1.5 px-3 text-[10px] font-bold uppercase hover:bg-gray-200 transition tracking-tight dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700';
+  const iconButtonClass = 'w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-gray-700 font-bold text-xs transition dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
+  const secondaryButtonClass = 'bg-white border border-gray-200 text-gray-700 rounded-xl h-10 px-6 text-sm font-bold hover:border-gray-300 transition flex items-center gap-2 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600';
+  const primaryButtonClass = 'bg-blue-600 text-white rounded-xl h-10 px-8 text-sm font-bold hover:bg-blue-700 transition flex items-center gap-2 shadow-lg shadow-blue-600/20 dark:bg-blue-500 dark:hover:bg-blue-400';
+  const modalActionClass = 'bg-gray-100 text-gray-700 rounded-xl px-6 h-11 font-bold hover:bg-gray-200 transition dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
+  const modalPrimaryActionClass = 'bg-blue-600 text-white rounded-xl px-8 h-11 font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-600/20 dark:bg-blue-500 dark:hover:bg-blue-400';
+  const themeBarClass = 'inline-flex rounded-xl border border-gray-200 bg-gray-100 p-1 h-10 dark:border-slate-700 dark:bg-slate-900';
+  const themeOptionClass = (mode) => $(() => {
+    const active = themeMode.value === mode;
+    return [
+      'rounded-lg px-3 h-7.5 text-xs font-bold uppercase tracking-wider transition',
+      active
+        ? 'bg-white text-gray-900 shadow-sm dark:bg-slate-800 dark:text-slate-100'
+        : 'text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200',
+    ].join(' ');
+  });
+
   const ResizeButtons = ({ onPlus, onMinus, vertical }) => (
     <div class={vertical ? "flex flex-col gap-1 items-center" : "flex flex-row gap-1 items-center"}>
-      <button class="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-gray-700 font-bold text-xs transition" on:click={onPlus}>+</button>
-      <button class="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-gray-700 font-bold text-xs transition" on:click={onMinus}>-</button>
+      <button class={iconButtonClass} on:click={onPlus}>+</button>
+      <button class={iconButtonClass} on:click={onMinus}>-</button>
     </div>
   );
 
   return (
-    <div class="h-screen flex overflow-hidden font-sans bg-white">
+    <div class="h-screen flex overflow-hidden font-sans bg-white text-gray-900 dark:bg-slate-950 dark:text-slate-100">
       {/* Left: Config */}
-      <div class="w-[400px] h-full overflow-auto bg-gray-50 border-r flex flex-col z-10">
+      <div class="w-[400px] min-w-[400px] shrink-0 h-full overflow-auto bg-gray-50 border-r border-gray-200 flex flex-col z-10 dark:bg-slate-950 dark:border-slate-800">
         <div class="p-8 flex flex-col gap-8">
           <div>
-            <h2 class="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-              <div class="w-2 h-6 bg-blue-600 rounded-full"></div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-slate-100 mb-6 flex items-center gap-2">
+              <div class="w-2 h-6 bg-blue-600 dark:bg-blue-400 rounded-full"></div>
               Configuration
             </h2>
             
             <div class="grid gap-6">
               <div class="grid gap-4">
-                <div class="text-[10px] font-bold uppercase tracking-widest text-blue-600/70">Shape Helpers</div>
+                <div class={sectionTitleClass}>Shape Helpers</div>
                 <div class="grid grid-cols-2 gap-3">
                   <div class="grid gap-1">
-                    <label class="text-xs font-medium text-gray-500">Width</label>
-                    <input type="number" class="border rounded-lg h-9 px-3 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" value={width} on:input={(e) => updateSize(Math.max(1, Number(e.target.value) || 1), height.value)} />
+                    <label class={formLabelClass}>Width</label>
+                    <input type="number" class={inputClass} min={1} value={width} on:input={(e) => updateSize(Math.max(1, Number(e.target.value) || 1), height.value)} />
                   </div>
                   <div class="grid gap-1">
-                    <label class="text-xs font-medium text-gray-500">Height</label>
-                    <input type="number" class="border rounded-lg h-9 px-3 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" value={height} on:input={(e) => updateSize(width.value, Math.max(1, Number(e.target.value) || 1))} />
+                    <label class={formLabelClass}>Height</label>
+                    <input type="number" class={inputClass} min={1} value={height} on:input={(e) => updateSize(width.value, Math.max(1, Number(e.target.value) || 1))} />
                   </div>
                   {/*<button class="bg-blue-600 text-white rounded-lg h-9 px-4 text-sm font-semibold hover:bg-blue-700 transition" on:click={applyRectangle}>Rectangle</button>*/}
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                   <div class="grid gap-1">
-                    <label class="text-xs font-medium text-gray-500">Top col 1</label>
-                    <input type="number" class="border rounded-lg h-9 px-3 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" value={top1Text} on:input={(e) => top1Text.value = e.target.value} />
+                    <label class={formLabelClass}>Top col 1</label>
+                    <input type="number" class={inputClass} value={top1Text} on:input={(e) => top1Text.value = e.target.value} />
                   </div>
                   <div class="grid gap-1">
-                    <label class="text-xs font-medium text-gray-500">Top col 2</label>
-                    <input type="number" class="border rounded-lg h-9 px-3 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" value={top2Text} on:input={(e) => top2Text.value = e.target.value} />
+                    <label class={formLabelClass}>Top col 2</label>
+                    <input type="number" class={inputClass} value={top2Text} on:input={(e) => top2Text.value = e.target.value} />
                   </div>
-                  <button class="bg-blue-600 border text-white rounded-lg h-9 px-4 text-sm font-semibold hover:bg-blue-700 transition col-span-2" on:click={applyTrapezoid}>Apply</button>
+                  <button class="bg-blue-600 border border-blue-600 text-white rounded-lg h-9 px-4 text-sm font-semibold hover:bg-blue-700 transition col-span-2 dark:bg-blue-500 dark:border-blue-500 dark:hover:bg-blue-400" on:click={applyTrapezoid}>Apply</button>
                 </div>
               </div>
 
-              <div class="grid gap-4 border-t pt-6">
-                <div class="text-[10px] font-bold uppercase tracking-widest text-blue-600/70">Presets</div>
+              <div class={sectionClass}>
+                <div class={sectionTitleClass}>Presets</div>
                 <div class="flex flex-wrap gap-2">
                   {[
                     { label: 'Screws', mode: 'holes_all' },
@@ -766,25 +870,25 @@ export default function App() {
                     { label: 'Chamfers', mode: 'chamfer_all' },
                     { label: 'Clear', mode: 'clear_all' },
                   ].map(({ label, mode }) => (
-                    <button class="bg-gray-100 text-gray-600 rounded-lg py-1.5 px-3 text-[10px] font-bold uppercase hover:bg-gray-200 transition tracking-tight" on:click={() => applyHelper(mode)}>{label}</button>
+                    <button class={chipButtonClass} on:click={() => applyHelper(mode)}>{label}</button>
                   ))}
                 </div>
               </div>
 
-              <div class="grid gap-4 border-t pt-6">
-                <div class="text-[10px] font-bold uppercase tracking-widest text-blue-600/70">Board Type</div>
+              <div class={sectionClass}>
+                <div class={sectionTitleClass}>Board Type</div>
                 <div class="flex gap-4">
                   {['Full', 'Lite', 'Heavy'].map((v) => (
                     <label class="flex items-center gap-2 cursor-pointer group">
-                      <input type="radio" class="w-4 h-4 text-blue-600 focus:ring-blue-500/20 border-gray-300" checked={fullOrLite.eq(v)} on:change={() => fullOrLite.value = v} />
-                      <span class="text-sm font-medium text-gray-600 group-hover:text-blue-600 transition">{v}</span>
+                      <input type="radio" class="w-4 h-4 text-blue-600 focus:ring-blue-500/20 border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:focus:ring-blue-400/20" checked={fullOrLite.eq(v)} on:change={() => fullOrLite.value = v} />
+                      <span class="text-sm font-medium text-gray-600 group-hover:text-blue-600 transition dark:text-slate-300 dark:group-hover:text-blue-300">{v}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
-              <div class="grid gap-4 border-t pt-6">
-                <div class="text-[10px] font-bold uppercase tracking-widest text-blue-600/70">Dimensions</div>
+              <div class={sectionClass}>
+                <div class={sectionTitleClass}>Dimensions</div>
                 <div class="grid grid-cols-2 gap-x-4 gap-y-3">
                   {[
                     { label: 'Tile Size', step: 1, sig: tileSizeValue },
@@ -794,15 +898,15 @@ export default function App() {
                     { label: 'Heavy Gap', step: 0.1, sig: heavyTileGapValue }
                   ].map(({ label, sig, step }) => (
                     <div class="grid gap-1">
-                      <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{label}</label>
-                      <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" step={step} value={sig} on:input={(e) => sig.value = Number(e.target.value) || 0} />
+                      <label class={fieldLabelClass}>{label}</label>
+                      <input type="number" class={compactInputClass} step={step} value={sig} on:input={(e) => sig.value = Number(e.target.value) || 0} />
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div class="grid gap-4 border-t pt-6">
-                <div class="text-[10px] font-bold uppercase tracking-widest text-blue-600/70">Screws</div>
+              <div class={sectionClass}>
+                <div class={sectionTitleClass}>Screws</div>
                 <div class="grid grid-cols-2 gap-x-4 gap-y-3">
                   {[
                     { label: 'Screw Diameter', step: 0.1, sig: screwDiameterValue },
@@ -811,13 +915,13 @@ export default function App() {
                     { label: 'Sink Deg', step: 0.1, sig: screwHeadCountersunkDegreeValue },
                   ].map(({ label, sig, step }) => (
                     <div class="grid gap-1">
-                      <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{label}</label>
-                      <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" step={step} value={sig} on:input={(e) => sig.value = Number(e.target.value) || 0} />
+                      <label class={fieldLabelClass}>{label}</label>
+                      <input type="number" class={compactInputClass} step={step} value={sig} on:input={(e) => sig.value = Number(e.target.value) || 0} />
                     </div>
                   ))}
                 </div>
-                <label class="flex items-center gap-2 text-sm font-medium text-gray-600 cursor-pointer">
-                  <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20" checked={screwHeadIsCountersunk} on:change={(e) => screwHeadIsCountersunk.value = e.target.checked} />
+                <label class={toggleLabelClass}>
+                  <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-900 dark:focus:ring-blue-400/20" checked={screwHeadIsCountersunk} on:change={(e) => screwHeadIsCountersunk.value = e.target.checked} />
                   Countersunk
                 </label>
               </div>
@@ -825,22 +929,22 @@ export default function App() {
 
 
               <If condition={fullOrLite.eq('Lite')}>{() => (
-                <div class="grid gap-4 border-t pt-6">
-                  <div class="text-[10px] font-bold uppercase tracking-widest text-blue-600/70">Adhesive Base</div>
-                  <label class="flex items-center gap-2 text-sm font-medium text-gray-600 cursor-pointer">
-                    <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20" checked={addAdhesiveBase} on:change={(e) => addAdhesiveBase.value = e.target.checked} />
+                <div class={sectionClass}>
+                  <div class={sectionTitleClass}>Adhesive Base</div>
+                  <label class={toggleLabelClass}>
+                    <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-900 dark:focus:ring-blue-400/20" checked={addAdhesiveBase} on:change={(e) => addAdhesiveBase.value = e.target.checked} />
                     Enable base
                   </label>
                   <div class="grid gap-1">
-                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Thickness</label>
-                    <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" value={adhesiveBaseThicknessValue} on:input={(e) => adhesiveBaseThicknessValue.value = Number(e.target.value) || 0} />
+                    <label class={fieldLabelClass}>Thickness</label>
+                    <input type="number" class={compactInputClass} value={adhesiveBaseThicknessValue} on:input={(e) => adhesiveBaseThicknessValue.value = Number(e.target.value) || 0} />
                   </div>
                 </div>
               )}{() => (
-                <div class="grid gap-4 border-t pt-6">
-                  <div class="text-[10px] font-bold uppercase tracking-widest text-blue-600/70">Backside Screws</div>
-                  <label class="flex items-center gap-2 text-sm font-medium text-gray-600 cursor-pointer">
-                    <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20" checked={backsideScrewHole} on:change={(e) => backsideScrewHole.value = e.target.checked} />
+                <div class={sectionClass}>
+                  <div class={sectionTitleClass}>Backside Screws</div>
+                  <label class={toggleLabelClass}>
+                    <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-900 dark:focus:ring-blue-400/20" checked={backsideScrewHole} on:change={(e) => backsideScrewHole.value = e.target.checked} />
                     Enable backside
                   </label>
                   <div class="grid grid-cols-2 gap-x-4 gap-y-3">
@@ -849,51 +953,55 @@ export default function App() {
                       { label: 'Head Inset', step: 0.1, sig: backsideScrewHeadInsetValue },
                     ].map(({ label, sig, step }) => (
                       <div class="grid gap-1">
-                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{label}</label>
-                        <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" step={step} value={sig} on:input={(e) => sig.value = Number(e.target.value) || 0} />
+                        <label class={fieldLabelClass}>{label}</label>
+                        <input type="number" class={compactInputClass} step={step} value={sig} on:input={(e) => sig.value = Number(e.target.value) || 0} />
                       </div>
                     ))}
                   </div>
-                  <label class="flex items-center gap-2 text-sm font-medium text-gray-600 cursor-pointer">
-                    <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20" checked={backsideScrewHeadIsCountersunk} on:change={(e) => backsideScrewHeadIsCountersunk.value = e.target.checked} />
+                  <label class={toggleLabelClass}>
+                    <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-900 dark:focus:ring-blue-400/20" checked={backsideScrewHeadIsCountersunk} on:change={(e) => backsideScrewHeadIsCountersunk.value = e.target.checked} />
                     Backside countersunk
                   </label>
                 </div>
               )}</If>
 
-              <div class="grid gap-4 border-t pt-4">
-                <div class="text-sm font-semibold uppercase tracking-wider text-gray-500">Stacking</div>
+              <div class="grid gap-4 border-t border-gray-200 pt-4 dark:border-slate-800">
+                <div class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400">Stacking</div>
                 <div class="grid grid-cols-2 gap-x-4 gap-y-3">
                   <div class="grid gap-1">
-                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Stack Count</label>
-                    <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" value={stackCountValue} on:input={(e) => stackCountValue.value = Number(e.target.value) || 0} />
+                    <label class={fieldLabelClass}>Stack Count</label>
+                    <input type="number" class={compactInputClass} value={stackCountValue} on:input={(e) => stackCountValue.value = Number(e.target.value) || 0} />
                   </div>
                   <div class="grid gap-1">
-                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Method</label>
-                    <select class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full bg-white" value={stackingMethod} on:change={(e) => stackingMethod.value = e.target.value}>
+                    <label class={fieldLabelClass}>Method</label>
+                    <select class={compactInputClass} value={stackingMethod} on:change={(e) => stackingMethod.value = e.target.value}>
                       <option>Interface Layer</option>
                       <option>Ironing - BETA</option>
                     </select>
                   </div>
                   <div class="grid gap-1">
-                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Interface Thickness</label>
-                    <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" step={0.1} value={interfaceThicknessValue} on:input={(e) => interfaceThicknessValue.value = Number(e.target.value) || 0} />
+                    <label class={fieldLabelClass}>Interface Thickness</label>
+                    <input type="number" class={compactInputClass} step={0.1} value={interfaceThicknessValue} on:input={(e) => interfaceThicknessValue.value = Number(e.target.value) || 0} />
                   </div>
                   <div class="grid gap-1">
-                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Separation</label>
-                    <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" step={0.1} value={interfaceSeparationValue} on:input={(e) => interfaceSeparationValue.value = Number(e.target.value) || 0} />
+                    <label class={fieldLabelClass}>Separation</label>
+                    <input type="number" class={compactInputClass} step={0.1} value={interfaceSeparationValue} on:input={(e) => interfaceSeparationValue.value = Number(e.target.value) || 0} />
                   </div>
                 </div>
               </div>
 
-              <div class="grid gap-4 border-t pt-4">
-                <div class="text-sm font-semibold uppercase tracking-wider text-gray-500">Quality</div>
+              <div class="grid gap-4 border-t border-gray-200 pt-4 dark:border-slate-800">
+                <div class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400">Quality</div>
                 <div class="grid grid-cols-2 gap-x-4 gap-y-3">
                   <div class="grid gap-1">
-                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Segments</label>
-                    <input type="number" class="border rounded-lg h-8 px-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full" value={circleSegmentsValue} on:input={(e) => circleSegmentsValue.value = Number(e.target.value) || 0} />
+                    <label class={fieldLabelClass}>Segments</label>
+                    <input type="number" class={compactInputClass} value={circleSegmentsValue} on:input={(e) => circleSegmentsValue.value = Number(e.target.value) || 0} />
                   </div>
                 </div>
+              </div>
+
+              <div class="grid gap-3 border-t border-gray-200 pt-4 dark:border-slate-800">
+                <button class={chipButtonClass} on:click={clearConfiguration}>Clear Saved Config</button>
               </div>
             </div>
           </div>
@@ -901,31 +1009,36 @@ export default function App() {
       </div>
 
       {/* Right: Preview Area */}
-      <div class="flex-1 flex flex-col h-full bg-white relative">
+      <div class="flex-1 min-w-0 flex flex-col h-full bg-white relative dark:bg-slate-950">
         {/* Title Bar */}
-        <div class="h-16 border-b flex items-center justify-between px-8 bg-white z-20 shadow-sm">
+        <div class="h-16 border-b border-gray-200 flex items-center justify-between px-8 bg-white z-20 shadow-sm dark:border-slate-800 dark:bg-slate-950">
           <div class="flex items-center gap-3">
-            <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-black text-xl shadow-lg shadow-blue-500/30">G</div>
-            <h1 class="text-lg font-bold bg-clip-text bg-gradient-to-r from-gray-900 to-gray-600">openGrid Studio</h1>
+            <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-black text-xl shadow-lg shadow-blue-500/30 dark:bg-blue-500 dark:shadow-blue-500/20">G</div>
+            <h1 class="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-slate-400">openGrid Studio</h1>
           </div>
-          <div class="flex gap-2">
-            <button class="bg-white border-2 border-gray-200 text-gray-700 rounded-xl h-10 px-6 text-sm font-bold hover:border-gray-300 transition flex items-center gap-2" on:click={copy}>
+          <div class="flex gap-2 items-center">
+            <div class={themeBarClass}>
+              <button class={themeOptionClass('auto')} on:click={() => themeMode.value = 'auto'}>Auto</button>
+              <button class={themeOptionClass('light')} on:click={() => themeMode.value = 'light'}>Light</button>
+              <button class={themeOptionClass('dark')} on:click={() => themeMode.value = 'dark'}>Dark</button>
+            </div>
+            <button class={secondaryButtonClass} on:click={copy}>
               Copy SCAD
             </button>
-            <button class="bg-blue-600 text-white rounded-xl h-10 px-8 text-sm font-bold hover:bg-blue-700 transition flex items-center gap-2 shadow-lg shadow-blue-600/20" on:click={downloadScad}>
+            <button class={primaryButtonClass} on:click={downloadScad}>
               Download .scad
             </button>
           </div>
         </div>
 
         {/* Editor Surface */}
-        <div class="flex-1 overflow-auto p-12 flex flex-col items-center bg-gray-50/50 relative scrollbar-hide">
-          <div class="flex flex-col items-center gap-6 m-auto">
+        <div class="flex-1 overflow-x-auto overflow-y-auto p-12 flex bg-gray-50/50 relative scrollbar-hide dark:bg-slate-900/40">
+          <div class="flex min-w-max min-h-full flex-col items-center justify-center gap-6 m-auto">
             <ResizeButtons onPlus={() => updateSize(width.value, height.value + 1, 0, 1)} onMinus={() => updateSize(width.value, height.value - 1, 0, -1)} />
             <div class="flex items-center gap-6">
               <ResizeButtons vertical onPlus={() => updateSize(width.value + 1, height.value, 1, 0)} onMinus={() => updateSize(width.value - 1, height.value, -1, 0)} />
-              <div class="bg-white rounded-2xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-gray-100 flex items-center justify-center">
-                <svg attr:width={svgW} attr:height={svgH} class="rounded-lg border border-gray-100 bg-white">
+              <div class="bg-white rounded-2xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-gray-100 flex items-center justify-center dark:bg-slate-900 dark:border-slate-700 dark:shadow-[0_24px_80px_rgba(2,6,23,0.55)]">
+                <svg attr:width={svgW} attr:height={svgH} class="rounded-lg border border-gray-100 bg-white dark:border-slate-700">
                   <rect attr:x={pad} attr:y={pad} attr:width={boardW} attr:height={boardH} attr:fill="#000" />
 
                   <For entries={tiles} track="id">
@@ -1012,25 +1125,25 @@ export default function App() {
         {() => (
           <div class="fixed inset-0 z-[100] flex items-center justify-center p-8">
             <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" on:click={() => showModal.value = false}></div>
-            <div class="bg-white rounded-3xl w-full max-w-2xl flex flex-col shadow-2xl overflow-hidden relative animate-modal-in">
-              <div class="p-6 border-b flex justify-between items-center">
-                <h3 class="text-xl font-bold text-gray-900">Copy SCAD Code</h3>
-                <button class="text-gray-400 hover:text-gray-600 transition" on:click={() => showModal.value = false}>
+            <div class="bg-white rounded-3xl w-full max-w-2xl flex flex-col shadow-2xl overflow-hidden relative animate-modal-in dark:bg-slate-950 dark:border dark:border-slate-800">
+              <div class="p-6 border-b border-gray-200 flex justify-between items-center dark:border-slate-800">
+                <h3 class="text-xl font-bold text-gray-900 dark:text-slate-100">Copy SCAD Code</h3>
+                <button class="text-gray-400 hover:text-gray-600 transition dark:text-slate-500 dark:hover:text-slate-300" on:click={() => showModal.value = false}>
                   <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
               </div>
-              <div class="p-6 bg-gray-50">
+              <div class="p-6 bg-gray-50 dark:bg-slate-900/60">
                 <textarea 
                   readonly 
-                  class="w-full h-80 border rounded-xl p-4 font-mono text-[10px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition leading-tight resize-none" 
+                  class="w-full h-80 border border-gray-200 rounded-xl p-4 font-mono text-[10px] text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition leading-tight resize-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:ring-blue-400/20" 
                   $ref={(el) => { if (el) { el.select(); } }}
                   value={exportText} 
                 />
               </div>
-              <div class="p-6 border-t flex justify-end gap-3">
-                <button class="bg-gray-100 text-gray-700 rounded-xl px-6 h-11 font-bold hover:bg-gray-200 transition" on:click={() => showModal.value = false}>Close</button>
+              <div class="p-6 border-t border-gray-200 flex justify-end gap-3 dark:border-slate-800">
+                <button class={modalActionClass} on:click={() => showModal.value = false}>Close</button>
                 <button 
-                  class="bg-blue-600 text-white rounded-xl px-8 h-11 font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-600/20" 
+                  class={modalPrimaryActionClass} 
                   on:click={async () => {
                     await navigator.clipboard.writeText(exportText.value);
                     showModal.value = false;
