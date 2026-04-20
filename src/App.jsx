@@ -312,7 +312,45 @@ function buildEntryScad(config) {
     circleSegmentsValue,
   } = config;
 
-  return `include <BOSL2/std.scad>\nuse <opengrid_generator.scad>\n\nmask = ${toScad2DArray(exportGrid)};\n\nopenGridFromMask(\n  mask_array = mask,\n  full_or_lite = \"${fullOrLite}\",\n  tile_size = ${tileSizeValue},\n  tile_thickness = ${tileThicknessValue},\n  lite_tile_thickness = ${liteTileThicknessValue},\n  heavy_tile_thickness = ${heavyTileThicknessValue},\n  heavy_tile_gap = ${heavyTileGapValue},\n  add_adhesive_base = ${toScadBool(addAdhesiveBase)},\n  adhesive_base_thickness = ${adhesiveBaseThicknessValue},\n  screw_diameter = ${screwDiameterValue},\n  screw_head_diameter = ${screwHeadDiameterValue},\n  screw_head_inset = ${screwHeadInsetValue},\n  screw_head_is_countersunk = ${toScadBool(screwHeadIsCountersunk)},\n  screw_head_countersunk_degree = ${screwHeadCountersunkDegreeValue},\n  backside_screw_hole = ${toScadBool(backsideScrewHole)},\n  backside_screw_head_diameter_shrink = ${backsideScrewHeadDiameterShrinkValue},\n  backside_screw_head_inset = ${backsideScrewHeadInsetValue},\n  backside_screw_head_is_countersunk = ${toScadBool(backsideScrewHeadIsCountersunk)},\n  backside_screw_head_countersunk_degree = ${backsideScrewHeadCountersunkDegreeValue},\n  stack_count = ${stackCountValue},\n  stacking_method = \"${stackingMethod}\",\n  interface_thickness = ${interfaceThicknessValue},\n  interface_separation = ${interfaceSeparationValue},\n  circle_segments = ${circleSegmentsValue},\n  anchor = BOT,\n  spin = 0,\n  orient = UP\n);`;
+  return `/*
+Usage: Download 'opengrid_generator.scad' from 
+and place in the same dir of this script.
+*/
+
+include <BOSL2/std.scad>
+use <opengrid_generator.scad>
+
+mask = ${toScad2DArray(exportGrid)};
+
+openGridFromMask(
+  mask_array = mask,
+  full_or_lite = \"${fullOrLite}\",
+  tile_size = ${tileSizeValue},
+  tile_thickness = ${tileThicknessValue},
+  lite_tile_thickness = ${liteTileThicknessValue},
+  heavy_tile_thickness = ${heavyTileThicknessValue},
+  heavy_tile_gap = ${heavyTileGapValue},
+  add_adhesive_base = ${toScadBool(addAdhesiveBase)},
+  adhesive_base_thickness = ${adhesiveBaseThicknessValue},
+  screw_diameter = ${screwDiameterValue},
+  screw_head_diameter = ${screwHeadDiameterValue},
+  screw_head_inset = ${screwHeadInsetValue},
+  screw_head_is_countersunk = ${toScadBool(screwHeadIsCountersunk)},
+  screw_head_countersunk_degree = ${screwHeadCountersunkDegreeValue},
+  backside_screw_hole = ${toScadBool(backsideScrewHole)},
+  backside_screw_head_diameter_shrink = ${backsideScrewHeadDiameterShrinkValue},
+  backside_screw_head_inset = ${backsideScrewHeadInsetValue},
+  backside_screw_head_is_countersunk = ${toScadBool(backsideScrewHeadIsCountersunk)},
+  backside_screw_head_countersunk_degree = ${backsideScrewHeadCountersunkDegreeValue},
+  stack_count = ${stackCountValue},
+  stacking_method = \"${stackingMethod}\",
+  interface_thickness = ${interfaceThicknessValue},
+  interface_separation = ${interfaceSeparationValue},
+  circle_segments = ${circleSegmentsValue},
+  anchor = BOT,
+  spin = 0,
+  orient = UP
+);`;
 }
 
 function nodeState(kind, raw) {
@@ -504,11 +542,12 @@ const NodeGlyph = ({ kind, state, x, y, dir }) => {
 
 export default function App() {
   const themeMode = signal(DEFAULT_CONFIG.themeMode);
+  const previewMode = signal('2d');
   const systemPrefersDark = signal(false);
   const exportInFlight = signal(false);
   const exportError = signal('');
   const previewMesh = signal(null);
-  const previewLoading = signal(true);
+  const previewLoading = signal(false);
   const previewError = signal('');
   const fullOrLite = signal(DEFAULT_CONFIG.fullOrLite);
   const tileSizeValue = signal(DEFAULT_CONFIG.tileSizeValue);
@@ -705,6 +744,7 @@ export default function App() {
     interfaceSeparationValue: interfaceSeparationValue.value,
     circleSegmentsValue: circleSegmentsValue.value,
   }));
+  const previewConfigJson = $(() => JSON.stringify(exportConfig.value));
   const exportText = $(() => buildEntryScad(exportConfig.value));
 
   const updateSize = (nextW, nextH, offsetX = 0, offsetY = 0) => {
@@ -871,6 +911,16 @@ export default function App() {
         : 'text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200',
     ].join(' ');
   });
+  const previewBarClass = 'inline-flex rounded-xl border border-gray-200 bg-gray-100 p-1 h-10 dark:border-slate-700 dark:bg-slate-900';
+  const previewOptionClass = (mode) => $(() => {
+    const active = previewMode.value === mode;
+    return [
+      'rounded-lg px-3 h-7.5 text-xs font-bold uppercase tracking-wider transition',
+      active
+        ? 'bg-white text-gray-900 shadow-sm dark:bg-slate-800 dark:text-slate-100'
+        : 'text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200',
+    ].join(' ');
+  });
   const exportButtonClass = $(() => [
     primaryButtonClass,
     exportInFlight.value ? 'cursor-wait opacity-70' : '',
@@ -878,6 +928,17 @@ export default function App() {
 
   let previewTimer = null;
   let previewSequence = 0;
+
+  const cancelPreviewRender = (clearMesh = false) => {
+    if (previewTimer) {
+      clearTimeout(previewTimer);
+      previewTimer = null;
+    }
+    previewSequence += 1;
+    previewLoading.value = false;
+    previewError.value = '';
+    if (clearMesh) previewMesh.value = null;
+  };
 
   const queuePreviewRender = (config) => {
     if (previewTimer) clearTimeout(previewTimer);
@@ -900,11 +961,16 @@ export default function App() {
   };
 
   watch(() => {
-    queuePreviewRender(exportConfig.value);
+    const previewConfig = JSON.parse(previewConfigJson.value);
+    if (previewMode.value !== '3d') {
+      cancelPreviewRender(false);
+      return;
+    }
+    queuePreviewRender(previewConfig);
   });
 
   onDispose(() => {
-    if (previewTimer) clearTimeout(previewTimer);
+    cancelPreviewRender(false);
   });
 
   const ResizeButtons = ({ onPlus, onMinus, vertical }) => (
@@ -1105,9 +1171,13 @@ export default function App() {
       <div class="flex-1 min-w-0 flex flex-col h-full bg-white relative dark:bg-slate-950">
         {/* Title Bar */}
         <div class="h-16 border-b border-gray-200 flex items-center justify-between px-8 bg-white z-20 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-4">
             <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-black text-xl shadow-lg shadow-blue-500/30 dark:bg-blue-500 dark:shadow-blue-500/20">G</div>
             <h1 class="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-slate-400">openGrid Studio</h1>
+            <div class={previewBarClass}>
+              <button class={previewOptionClass('2d')} on:click={() => previewMode.value = '2d'}>2D</button>
+              <button class={previewOptionClass('3d')} on:click={() => previewMode.value = '3d'}>3D</button>
+            </div>
           </div>
           <div class="flex gap-2 items-center">
             <div class={themeBarClass}>
@@ -1132,94 +1202,101 @@ export default function App() {
         </If>
 
         {/* Editor Surface */}
-        <div class="flex-1 overflow-x-auto overflow-y-auto p-12 flex bg-gray-50/50 relative scrollbar-hide dark:bg-slate-900/40">
-          <div class="flex min-w-max min-h-full flex-col xl:flex-row items-center justify-center gap-8 m-auto">
-            <div class="flex min-w-max min-h-full flex-col items-center justify-center gap-6">
-              <ResizeButtons onPlus={() => updateSize(width.value, height.value + 1, 0, 1)} onMinus={() => updateSize(width.value, height.value - 1, 0, -1)} />
-              <div class="flex items-center gap-6">
-                <ResizeButtons vertical onPlus={() => updateSize(width.value + 1, height.value, 1, 0)} onMinus={() => updateSize(width.value - 1, height.value, -1, 0)} />
-                <div class="bg-white rounded-2xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-gray-100 flex items-center justify-center dark:bg-slate-900 dark:border-slate-700 dark:shadow-[0_24px_80px_rgba(2,6,23,0.55)]">
-                  <svg attr:width={svgW} attr:height={svgH} class="rounded-lg border border-gray-100 bg-white dark:border-slate-700">
-                    <rect attr:x={pad} attr:y={pad} attr:width={boardW} attr:height={boardH} attr:fill="#000" />
+        <If condition={previewMode.eq('2d')}>
+          {() => (
+            <div class="flex-1 overflow-x-auto overflow-y-auto p-12 flex bg-gray-50/50 relative scrollbar-hide dark:bg-slate-900/40">
+              <div class="flex min-w-max min-h-full flex-col items-center justify-center gap-8 m-auto">
+                <div class="flex min-w-max min-h-full flex-col items-center justify-center gap-6">
+                  <ResizeButtons onPlus={() => updateSize(width.value, height.value + 1, 0, 1)} onMinus={() => updateSize(width.value, height.value - 1, 0, -1)} />
+                  <div class="flex items-center gap-6">
+                    <ResizeButtons vertical onPlus={() => updateSize(width.value + 1, height.value, 1, 0)} onMinus={() => updateSize(width.value - 1, height.value, -1, 0)} />
+                    <div class="bg-white rounded-2xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-gray-100 flex items-center justify-center dark:bg-slate-900 dark:border-slate-700 dark:shadow-[0_24px_80px_rgba(2,6,23,0.55)]">
+                      <svg attr:width={svgW} attr:height={svgH} class="rounded-lg border border-gray-100 bg-white dark:border-slate-700">
+                        <rect attr:x={pad} attr:y={pad} attr:width={boardW} attr:height={boardH} attr:fill="#000" />
 
-                    <For entries={tiles} track="id">
-                      {({ item: { tx, ty, gx, gy } }) => {
-                        const active = $(() => tileFill(read(getMask(maskGrid.value, gx, gy))));
-                        return (
-                          <If condition={$(() => !active.value)}>
-                            {() => (
-                              <rect
-                                attr:x={pad + tx * tileSize} attr:y={pad + ty * tileSize}
-                                attr:width={tileSize} attr:height={tileSize}
-                                attr:fill="#fff"
-                              />
-                            )}
-                          </If>
-                        );
-                      }}
-                    </For>
+                        <For entries={tiles} track="id">
+                          {({ item: { tx, ty, gx, gy } }) => {
+                            const active = $(() => tileFill(read(getMask(maskGrid.value, gx, gy))));
+                            return (
+                              <If condition={$(() => !active.value)}>
+                                {() => (
+                                  <rect
+                                    attr:x={pad + tx * tileSize} attr:y={pad + ty * tileSize}
+                                    attr:width={tileSize} attr:height={tileSize}
+                                    attr:fill="#fff"
+                                  />
+                                )}
+                              </If>
+                            );
+                          }}
+                        </For>
 
-                    <For entries={tiles} track="id">
-                      {({ item: { tx, ty, gx, gy } }) => {
-                        const active = $(() => tileFill(read(getMask(maskGrid.value, gx, gy))));
-                        const x = pad + tx * tileSize + half;
-                        const y = pad + ty * tileSize + half;
-                        const sq = squareTile(x, y, tileSize);
-                        const border = 3;
+                        <For entries={tiles} track="id">
+                          {({ item: { tx, ty, gx, gy } }) => {
+                            const active = $(() => tileFill(read(getMask(maskGrid.value, gx, gy))));
+                            const x = pad + tx * tileSize + half;
+                            const y = pad + ty * tileSize + half;
+                            const sq = squareTile(x, y, tileSize);
+                            const border = 3;
 
-                        return (
-                          <If condition={active}>
-                            {() => (
+                            return (
+                              <If condition={active}>
+                                {() => (
+                                  <g>
+                                    <rect attr:x={sq.x} attr:y={sq.y} attr:width={sq.w} attr:height={sq.h} attr:fill="#000" />
+                                    <rect attr:x={sq.x + border} attr:y={sq.y + border} attr:width={sq.w - border * 2} attr:height={sq.h - border * 2} attr:fill="#2563eb" />
+                                  </g>
+                                )}
+                              </If>
+                            );
+                          }}
+                        </For>
+
+                        <For entries={nodes} track="id">
+                          {({ item: { gx, gy } }) => {
+                            const { x, y } = toNodeXY(gx, gy);
+                            const kind = $(() => topo.value.nodeKind[gy]?.[gx] ?? 'none');
+                            const dir = $(() => topo.value.nodeDir[gy]?.[gx] ?? null);
+                            const state = $(() => nodeState(kind.value, getMask(maskGrid.value, gx, gy)));
+                            return (
                               <g>
-                                <rect attr:x={sq.x} attr:y={sq.y} attr:width={sq.w} attr:height={sq.h} attr:fill="#000" />
-                                <rect attr:x={sq.x + border} attr:y={sq.y + border} attr:width={sq.w - border * 2} attr:height={sq.h - border * 2} attr:fill="#2563eb" />
+                                <NodeGlyph kind={kind} state={state} x={x} y={y} dir={dir} />
                               </g>
-                            )}
-                          </If>
-                        );
-                      }}
-                    </For>
+                            );
+                          }}
+                        </For>
 
-                    <For entries={nodes} track="id">
-                      {({ item: { gx, gy } }) => {
-                        const { x, y } = toNodeXY(gx, gy);
-                        const kind = $(() => topo.value.nodeKind[gy]?.[gx] ?? 'none');
-                        const dir = $(() => topo.value.nodeDir[gy]?.[gx] ?? null);
-                        const state = $(() => nodeState(kind.value, getMask(maskGrid.value, gx, gy)));
-                        return (
-                          <g>
-                            <NodeGlyph kind={kind} state={state} x={x} y={y} dir={dir} />
-                          </g>
-                        );
-                      }}
-                    </For>
+                        <For entries={tiles} track="id">
+                          {({ item: { tx, ty, gx, gy } }) => (
+                            <rect
+                              attr:x={pad + tx * tileSize} attr:y={pad + ty * tileSize}
+                              attr:width={tileSize} attr:height={tileSize}
+                              attr:fill="transparent" on:click={() => toggleTile(gx, gy)} style="cursor: pointer"
+                            />
+                          )}
+                        </For>
 
-                    <For entries={tiles} track="id">
-                      {({ item: { tx, ty, gx, gy } }) => (
-                        <rect
-                          attr:x={pad + tx * tileSize} attr:y={pad + ty * tileSize}
-                          attr:width={tileSize} attr:height={tileSize}
-                          attr:fill="transparent" on:click={() => toggleTile(gx, gy)} style="cursor: pointer"
-                        />
-                      )}
-                    </For>
-
-                    <For entries={nodes} track="id">
-                      {({ item: { gx, gy } }) => {
-                        const { x, y } = toNodeXY(gx, gy);
-                        return (
-                          <circle attr:cx={x} attr:cy={y} attr:r={20} attr:fill="transparent" on:click={() => cycleNode(gx, gy)} style="cursor: pointer" />
-                        );
-                      }}
-                    </For>
-                  </svg>
+                        <For entries={nodes} track="id">
+                          {({ item: { gx, gy } }) => {
+                            const { x, y } = toNodeXY(gx, gy);
+                            return (
+                              <circle attr:cx={x} attr:cy={y} attr:r={20} attr:fill="transparent" on:click={() => cycleNode(gx, gy)} style="cursor: pointer" />
+                            );
+                          }}
+                        </For>
+                      </svg>
+                    </div>
+                    <ResizeButtons vertical onPlus={() => updateSize(width.value + 1, height.value)} onMinus={() => updateSize(width.value - 1, height.value)} />
+                  </div>
+                  <ResizeButtons onPlus={() => updateSize(width.value, height.value + 1)} onMinus={() => updateSize(width.value, height.value - 1)} />
                 </div>
-                <ResizeButtons vertical onPlus={() => updateSize(width.value + 1, height.value)} onMinus={() => updateSize(width.value - 1, height.value)} />
               </div>
-              <ResizeButtons onPlus={() => updateSize(width.value, height.value + 1)} onMinus={() => updateSize(width.value, height.value - 1)} />
             </div>
-
-            <div class="w-[360px] h-[420px] md:w-[420px] md:h-[520px] shrink-0">
+          )}
+        </If>
+        <If condition={previewMode.eq('3d')}>
+          {() => (
+            <div class="flex-1 min-h-0 bg-gray-50/50 dark:bg-slate-900/40">
               <RealtimePreview
                 mesh={previewMesh}
                 loading={previewLoading}
@@ -1227,8 +1304,8 @@ export default function App() {
                 theme={resolvedTheme}
               />
             </div>
-          </div>
-        </div>
+          )}
+        </If>
       </div>
 
       {/* Copy Modal */}
