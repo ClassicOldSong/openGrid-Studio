@@ -1,4 +1,4 @@
-import { renderDirectPreviewMesh, renderDirectStl, warmDirectStl } from './direct-stl.js'
+import { renderDirectExport, renderDirectPreviewMesh, warmDirectStl } from './direct-stl.js'
 
 self.onmessage = async ({ data }) => {
   if (data?.type === 'warmup') {
@@ -22,17 +22,22 @@ self.onmessage = async ({ data }) => {
     return
   }
 
-  if (data?.type !== 'render-stl') return
+  if (data?.type !== 'render-export' && data?.type !== 'render-stl') return
 
   try {
     if (!data.config) throw new Error('No export configuration provided.')
-    const rendered = await renderDirectStl(data.config)
+    const rendered = await renderDirectExport(
+      data.config,
+      data?.type === 'render-stl' ? 'stl-binary' : data.format,
+    )
     self.postMessage({
       id: data.id,
       ok: true,
-      stl: rendered.stl.buffer,
+      bytes: rendered.bytes.buffer,
+      mimeType: rendered.mimeType,
+      extension: rendered.extension,
       logs: rendered.logs,
-    }, [rendered.stl.buffer])
+    }, [rendered.bytes.buffer])
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     self.postMessage({ id: data.id, ok: false, error: message })

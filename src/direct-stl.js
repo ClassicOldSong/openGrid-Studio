@@ -1,4 +1,6 @@
 import ManifoldModule from 'manifold-3d/manifold'
+import { manifoldToGLTFDoc } from 'manifold-3d/lib/scene-builder'
+import { toArrayBuffer as export3mfToArrayBuffer } from 'manifold-3d/lib/export-3mf'
 import { buildPlacementData } from './placement-data.js'
 
 const OUTSIDE_EXTRUSION = 0.8
@@ -387,9 +389,41 @@ function buildHeavyBoard(Manifold, heavyFaceBoard, heavyMiddleBoard, tileThickne
   return unionAll(Manifold, [top, middle, bottom]).translate(0, 0, tileThickness + gap / 2)
 }
 
-function buildBinaryStl(manifold) {
+function getTriangleMesh(manifold) {
   const mesh = manifold.getMesh()
   const triangleCount = mesh.triVerts.length / 3
+  return { mesh, triangleCount }
+}
+
+function getTriangleGeometry(mesh, triangleIndex) {
+  const i0 = mesh.triVerts[triangleIndex * 3]
+  const i1 = mesh.triVerts[triangleIndex * 3 + 1]
+  const i2 = mesh.triVerts[triangleIndex * 3 + 2]
+
+  const p0 = mesh.position(i0)
+  const p1 = mesh.position(i1)
+  const p2 = mesh.position(i2)
+
+  const ux = p1[0] - p0[0]
+  const uy = p1[1] - p0[1]
+  const uz = p1[2] - p0[2]
+  const vx = p2[0] - p0[0]
+  const vy = p2[1] - p0[1]
+  const vz = p2[2] - p0[2]
+
+  let nx = uy * vz - uz * vy
+  let ny = uz * vx - ux * vz
+  let nz = ux * vy - uy * vx
+  const length = Math.hypot(nx, ny, nz) || 1
+  nx /= length
+  ny /= length
+  nz /= length
+
+  return { p0, p1, p2, normal: [nx, ny, nz] }
+}
+
+function buildBinaryStl(manifold) {
+  const { mesh, triangleCount } = getTriangleMesh(manifold)
   const buffer = new ArrayBuffer(84 + triangleCount * 50)
   const view = new DataView(buffer)
 
@@ -397,32 +431,11 @@ function buildBinaryStl(manifold) {
 
   let offset = 84
   for (let i = 0; i < triangleCount; i++) {
-    const i0 = mesh.triVerts[i * 3]
-    const i1 = mesh.triVerts[i * 3 + 1]
-    const i2 = mesh.triVerts[i * 3 + 2]
+    const { p0, p1, p2, normal } = getTriangleGeometry(mesh, i)
 
-    const p0 = mesh.position(i0)
-    const p1 = mesh.position(i1)
-    const p2 = mesh.position(i2)
-
-    const ux = p1[0] - p0[0]
-    const uy = p1[1] - p0[1]
-    const uz = p1[2] - p0[2]
-    const vx = p2[0] - p0[0]
-    const vy = p2[1] - p0[1]
-    const vz = p2[2] - p0[2]
-
-    let nx = uy * vz - uz * vy
-    let ny = uz * vx - ux * vz
-    let nz = ux * vy - uy * vx
-    const length = Math.hypot(nx, ny, nz) || 1
-    nx /= length
-    ny /= length
-    nz /= length
-
-    view.setFloat32(offset, nx, true)
-    view.setFloat32(offset + 4, ny, true)
-    view.setFloat32(offset + 8, nz, true)
+    view.setFloat32(offset, normal[0], true)
+    view.setFloat32(offset + 4, normal[1], true)
+    view.setFloat32(offset + 8, normal[2], true)
     offset += 12
 
     for (const point of [p0, p1, p2]) {
@@ -437,6 +450,32 @@ function buildBinaryStl(manifold) {
   }
 
   return new Uint8Array(buffer)
+}
+
+function formatAsciiStlNumber(value) {
+  if (Math.abs(value) < 1e-9) return '0'
+  return Number(value.toFixed(6)).toString()
+}
+
+function buildAsciiStl(manifold) {
+  const { mesh, triangleCount } = getTriangleMesh(manifold)
+  const lines = ['solid opengrid_design']
+
+  for (let i = 0; i < triangleCount; i++) {
+    const { p0, p1, p2, normal } = getTriangleGeometry(mesh, i)
+    lines.push(
+      `  facet normal ${formatAsciiStlNumber(normal[0])} ${formatAsciiStlNumber(normal[1])} ${formatAsciiStlNumber(normal[2])}`,
+      '    outer loop',
+      `      vertex ${formatAsciiStlNumber(p0[0])} ${formatAsciiStlNumber(p0[1])} ${formatAsciiStlNumber(p0[2])}`,
+      `      vertex ${formatAsciiStlNumber(p1[0])} ${formatAsciiStlNumber(p1[1])} ${formatAsciiStlNumber(p1[2])}`,
+      `      vertex ${formatAsciiStlNumber(p2[0])} ${formatAsciiStlNumber(p2[1])} ${formatAsciiStlNumber(p2[2])}`,
+      '    endloop',
+      '  endfacet',
+    )
+  }
+
+  lines.push('endsolid opengrid_design')
+  return new TextEncoder().encode(lines.join('\n'))
 }
 
 function buildPreviewMesh(manifold) {
@@ -562,11 +601,33 @@ export async function renderDirectPreviewMesh(config) {
   }
 }
 
-export async function renderDirectStl(config) {
+export async function renderDirectExport(config, format = 'stl-binary') {
   const model = await buildDirectModel(config)
 
+  if (format === '3mf') {
+    const doc = await manifoldToGLTFDoc(model)
+    const buffer = await export3mfToArrayBuffer(doc)
+    return {
+      bytes: new Uint8Array(buffer),
+      mimeType: 'model/3mf',
+      extension: '3mf',
+      logs: [`Direct export: 3MF (${config.fullOrLite})`],
+    }
+  }
+
+  if (format === 'stl-ascii') {
+    return {
+      bytes: buildAsciiStl(model),
+      mimeType: 'model/stl',
+      extension: 'stl',
+      logs: [`Direct export: ASCII STL (${config.fullOrLite})`],
+    }
+  }
+
   return {
-    stl: buildBinaryStl(model),
-    logs: [`Direct export: Manifold (${config.fullOrLite})`],
+    bytes: buildBinaryStl(model),
+    mimeType: 'model/stl',
+    extension: 'stl',
+    logs: [`Direct export: Binary STL (${config.fullOrLite})`],
   }
 }

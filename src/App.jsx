@@ -10,6 +10,11 @@ const BITS = {
 };
 
 const STORAGE_KEY = 'opengrid-mask-editor-config-v2';
+const EXPORT_FORMAT_OPTIONS = [
+  { value: 'stl-binary', label: 'STL', extension: 'stl', mimeType: 'model/stl' },
+  { value: 'stl-ascii', label: 'ASCII STL', extension: 'stl', mimeType: 'model/stl' },
+  { value: '3mf', label: '3MF', extension: '3mf', mimeType: 'model/3mf' },
+];
 const DEFAULT_CONFIG = {
   themeMode: 'auto',
   fullOrLite: 'Full',
@@ -44,6 +49,29 @@ const DEFAULT_CONFIG = {
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
+}
+
+function getExportFormatMeta(format) {
+  return EXPORT_FORMAT_OPTIONS.find((option) => option.value === format) ?? EXPORT_FORMAT_OPTIONS[0];
+}
+
+function shortHash(text) {
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36).padStart(7, '0').slice(0, 7);
+}
+
+function buildExportFilename(config, format) {
+  const meta = getExportFormatMeta(format);
+  const boardWidth = Math.max(0, (config.exportGrid?.[0]?.length ?? 1) - 1);
+  const boardHeight = Math.max(0, (config.exportGrid?.length ?? 1) - 1);
+  const effectiveStackCount = config.addAdhesiveBase ? 1 : Math.max(1, Number(config.stackCountValue) || 1);
+  const boardType = String(config.fullOrLite || 'board').trim().toLowerCase();
+  const hash = shortHash(JSON.stringify(config));
+  return `opengrid_${boardType}_${boardWidth}x${boardHeight}_stack${effectiveStackCount}_${hash}.${meta.extension}`;
 }
 
 function range(n) {
@@ -543,6 +571,7 @@ const NodeGlyph = ({ kind, state, x, y, dir }) => {
 export default function App() {
   const themeMode = signal(DEFAULT_CONFIG.themeMode);
   const previewMode = signal('2d');
+  const exportFormat = signal('stl-binary');
   const systemPrefersDark = signal(false);
   const exportInFlight = signal(false);
   const exportError = signal('');
@@ -807,32 +836,40 @@ export default function App() {
     exportWorker.postMessage({ id, type, ...payload });
   });
 
-  const renderStl = (config) => requestWorker('render-stl', { config });
+  const renderExport = (config, format) => requestWorker('render-export', { config, format });
   const renderPreviewMesh = (config) => requestWorker('preview-mesh', { config });
 
-  const downloadStl = async () => {
+  const downloadExport = async () => {
     if (exportInFlight.value) return;
     exportInFlight.value = true;
     exportError.value = '';
     let objectUrl = null;
 
     try {
-      const { stl, logs } = await renderStl(exportConfig.value);
-      const blob = new Blob([new Uint8Array(stl)], { type: 'model/stl' });
+      const config = exportConfig.value;
+      const format = exportFormat.value;
+      const filename = buildExportFilename(config, format);
+      const { bytes, mimeType, logs } = await renderExport(config, format);
+      const blob = new Blob([new Uint8Array(bytes)], { type: mimeType });
       objectUrl = URL.createObjectURL(blob);
       const element = document.createElement('a');
       element.href = objectUrl;
-      element.download = 'opengrid_design.stl';
+      element.download = filename;
       document.body.appendChild(element);
       element.click();
       document.body.removeChild(element);
-      if (logs?.length) console.info('STL export:', logs.join('\n'));
+      if (logs?.length) console.info('Export:', logs.join('\n'));
     } catch (error) {
-      exportError.value = error instanceof Error ? error.message : 'STL export failed.';
+      exportError.value = error instanceof Error ? error.message : 'Export failed.';
     } finally {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
       exportInFlight.value = false;
     }
+  };
+
+  const chooseExportFormat = (format, event) => {
+    exportFormat.value = format;
+    event?.currentTarget?.closest('details')?.removeAttribute('open');
   };
 
   const clearConfiguration = () => {
@@ -898,7 +935,7 @@ export default function App() {
   const chipButtonClass = 'bg-gray-100 text-gray-600 rounded-lg py-1.5 px-3 text-[10px] font-bold uppercase hover:bg-gray-200 transition tracking-tight dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700';
   const iconButtonClass = 'w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-gray-700 font-bold text-xs transition dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
   const secondaryButtonClass = 'bg-white border border-gray-200 text-gray-700 rounded-xl h-10 px-6 text-sm font-bold hover:border-gray-300 transition flex items-center gap-2 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600';
-  const primaryButtonClass = 'bg-blue-600 text-white rounded-xl h-10 px-8 text-sm font-bold hover:bg-blue-700 transition flex items-center gap-2 shadow-lg shadow-blue-600/20 dark:bg-blue-500 dark:hover:bg-blue-400';
+  const primaryButtonClass = 'bg-blue-600 text-white rounded-xl h-10 px-4 text-sm font-bold hover:bg-blue-700 transition flex items-center gap-2 shadow-lg shadow-blue-600/20 dark:bg-blue-500 dark:hover:bg-blue-400';
   const modalActionClass = 'bg-gray-100 text-gray-700 rounded-xl px-6 h-11 font-bold hover:bg-gray-200 transition dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
   const modalPrimaryActionClass = 'bg-blue-600 text-white rounded-xl px-8 h-11 font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-600/20 dark:bg-blue-500 dark:hover:bg-blue-400';
   const themeBarClass = 'inline-flex rounded-xl border border-gray-200 bg-gray-100 p-1 h-10 dark:border-slate-700 dark:bg-slate-900';
@@ -921,9 +958,22 @@ export default function App() {
         : 'text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200',
     ].join(' ');
   });
+  const exportFormatLabel = $(() => getExportFormatMeta(exportFormat.value).label);
   const exportButtonClass = $(() => [
     primaryButtonClass,
+    'rounded-r-none',
     exportInFlight.value ? 'cursor-wait opacity-70' : '',
+  ].join(' '));
+  const exportDropdownButtonClass = $(() => [
+    'flex items-center justify-center bg-blue-600 text-white rounded-r-xl rounded-l-none h-10 px-2 leading-none hover:bg-blue-700 transition border-l border-blue-500/70 shadow-lg shadow-blue-600/20 dark:bg-blue-500 dark:hover:bg-blue-400 dark:border-blue-400/40',
+    exportInFlight.value ? 'cursor-wait opacity-70 pointer-events-none' : '',
+  ].join(' '));
+  const exportMenuClass = 'absolute right-0 top-full z-30 mt-2 min-w-40 rounded-xl border border-gray-200 bg-white p-1 shadow-[0_12px_30px_rgba(15,23,42,0.14)] dark:border-slate-700 dark:bg-slate-900';
+  const exportMenuItemClass = (format) => $(() => [
+    'flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-semibold transition',
+    exportFormat.value === format
+      ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200'
+      : 'text-gray-700 hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800',
   ].join(' '));
 
   let previewTimer = null;
@@ -1045,20 +1095,27 @@ export default function App() {
               </div>
 
               <div class={sectionClass}>
-                <div class={sectionTitleClass}>Dimensions</div>
+                <div class={sectionTitleClass}>Stacking</div>
                 <div class="grid grid-cols-2 gap-x-4 gap-y-3">
-                  {[
-                    { label: 'Tile Size', step: 1, sig: tileSizeValue },
-                    { label: 'Thickness', step: 0.1, sig: tileThicknessValue },
-                    { label: 'Lite Thk', step: 0.1, sig: liteTileThicknessValue },
-                    { label: 'Heavy Thk', step: 0.1, sig: heavyTileThicknessValue },
-                    { label: 'Heavy Gap', step: 0.1, sig: heavyTileGapValue }
-                  ].map(({ label, sig, step }) => (
-                    <div class="grid gap-1">
-                      <label class={fieldLabelClass}>{label}</label>
-                      <input type="number" class={compactInputClass} step={step} value={sig} on:input={(e) => sig.value = Number(e.target.value) || 0} />
-                    </div>
-                  ))}
+                  <div class="grid gap-1">
+                    <label class={fieldLabelClass}>Stack Count</label>
+                    <input type="number" class={compactInputClass} value={stackCountValue} on:input={(e) => stackCountValue.value = Number(e.target.value) || 0} />
+                  </div>
+                  <div class="grid gap-1">
+                    <label class={fieldLabelClass}>Method</label>
+                    <select class={compactInputClass} value={stackingMethod} on:change={(e) => stackingMethod.value = e.target.value}>
+                      <option>Interface Layer</option>
+                      <option>Ironing - BETA</option>
+                    </select>
+                  </div>
+                  <div class="grid gap-1">
+                    <label class={fieldLabelClass}>Interface Thickness</label>
+                    <input type="number" class={compactInputClass} step={0.1} value={interfaceThicknessValue} on:input={(e) => interfaceThicknessValue.value = Number(e.target.value) || 0} />
+                  </div>
+                  <div class="grid gap-1">
+                    <label class={fieldLabelClass}>Separation</label>
+                    <input type="number" class={compactInputClass} step={0.1} value={interfaceSeparationValue} on:input={(e) => interfaceSeparationValue.value = Number(e.target.value) || 0} />
+                  </div>
                 </div>
               </div>
 
@@ -1082,22 +1139,6 @@ export default function App() {
                   Countersunk
                 </label>
               </div>
-
-
-
-              <If condition={fullOrLite.eq('Lite')}>{() => (
-                <div class={sectionClass}>
-                  <div class={sectionTitleClass}>Adhesive Base</div>
-                  <label class={toggleLabelClass}>
-                    <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-900 dark:focus:ring-blue-400/20" checked={addAdhesiveBase} on:change={(e) => addAdhesiveBase.value = e.target.checked} />
-                    Enable base
-                  </label>
-                  <div class="grid gap-1">
-                    <label class={fieldLabelClass}>Thickness</label>
-                    <input type="number" class={compactInputClass} value={adhesiveBaseThicknessValue} on:input={(e) => adhesiveBaseThicknessValue.value = Number(e.target.value) || 0} />
-                  </div>
-                </div>
-              )}</If>
 
               <If condition={fullOrLite.eq('Full')}>{() => (
                 <div class={sectionClass}>
@@ -1124,33 +1165,42 @@ export default function App() {
                 </div>
               )}</If>
 
-              <div class="grid gap-4 border-t border-gray-200 pt-4 dark:border-slate-800">
-                <div class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400">Stacking</div>
+              <If condition={fullOrLite.eq('Lite')}>{() => (
+                <div class={sectionClass}>
+                  <div class={sectionTitleClass}>Adhesive Base</div>
+                  <label class={toggleLabelClass}>
+                    <input type="checkbox" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-900 dark:focus:ring-blue-400/20" checked={addAdhesiveBase} on:change={(e) => addAdhesiveBase.value = e.target.checked} />
+                    Enable base
+                  </label>
+                  <div class="grid gap-1">
+                    <label class={fieldLabelClass}>Thickness</label>
+                    <input type="number" class={compactInputClass} value={adhesiveBaseThicknessValue} on:input={(e) => adhesiveBaseThicknessValue.value = Number(e.target.value) || 0} />
+                  </div>
+                </div>
+              )}</If>
+
+              <div class={sectionClass}>
+                <div class={sectionTitleClass}>Dimensions</div>
                 <div class="grid grid-cols-2 gap-x-4 gap-y-3">
-                  <div class="grid gap-1">
-                    <label class={fieldLabelClass}>Stack Count</label>
-                    <input type="number" class={compactInputClass} value={stackCountValue} on:input={(e) => stackCountValue.value = Number(e.target.value) || 0} />
-                  </div>
-                  <div class="grid gap-1">
-                    <label class={fieldLabelClass}>Method</label>
-                    <select class={compactInputClass} value={stackingMethod} on:change={(e) => stackingMethod.value = e.target.value}>
-                      <option>Interface Layer</option>
-                      <option>Ironing - BETA</option>
-                    </select>
-                  </div>
-                  <div class="grid gap-1">
-                    <label class={fieldLabelClass}>Interface Thickness</label>
-                    <input type="number" class={compactInputClass} step={0.1} value={interfaceThicknessValue} on:input={(e) => interfaceThicknessValue.value = Number(e.target.value) || 0} />
-                  </div>
-                  <div class="grid gap-1">
-                    <label class={fieldLabelClass}>Separation</label>
-                    <input type="number" class={compactInputClass} step={0.1} value={interfaceSeparationValue} on:input={(e) => interfaceSeparationValue.value = Number(e.target.value) || 0} />
-                  </div>
+                  {[
+                    { label: 'Tile Size', step: 1, sig: tileSizeValue },
+                    { label: 'Thickness', type: 'Full', step: 0.1, sig: tileThicknessValue },
+                    { label: 'Lite Thickness', type: 'Lite', step: 0.1, sig: liteTileThicknessValue },
+                    { label: 'Heavy Thickness', type: 'Heavy', step: 0.1, sig: heavyTileThicknessValue },
+                    { label: 'Heavy Gap', type: 'Heavy', step: 0.1, sig: heavyTileGapValue }
+                  ].map(({ label, type, sig, step }) => (
+                    <If condition={() => type ? fullOrLite.value === type : true}>{() => (
+                      <div class="grid gap-1">
+                        <label class={fieldLabelClass}>{label}</label>
+                        <input type="number" class={compactInputClass} step={step} value={sig} on:input={(e) => sig.value = Number(e.target.value) || 0} />
+                      </div>
+                    )}</If>
+                  ))}
                 </div>
               </div>
 
-              <div class="grid gap-4 border-t border-gray-200 pt-4 dark:border-slate-800">
-                <div class="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400">Quality</div>
+              <div class={sectionClass}>
+                <div class={sectionTitleClass}>Quality</div>
                 <div class="grid grid-cols-2 gap-x-4 gap-y-3">
                   <div class="grid gap-1">
                     <label class={fieldLabelClass}>Segments</label>
@@ -1188,9 +1238,25 @@ export default function App() {
             <button class={secondaryButtonClass} on:click={copy}>
               Copy SCAD
             </button>
-            <button class={exportButtonClass} on:click={downloadStl} prop:disabled={exportInFlight}>
-              {$(() => exportInFlight.value ? 'Rendering STL...' : 'Download STL')}
-            </button>
+            <div class="relative flex items-stretch">
+              <button class={exportButtonClass} on:click={downloadExport} prop:disabled={exportInFlight}>
+                {$(() => exportInFlight.value ? `Rendering ${exportFormatLabel.value}...` : `Download ${exportFormatLabel.value}`)}
+              </button>
+              <details class="relative">
+                <summary class={exportDropdownButtonClass} style="list-style: none;">
+                  <svg aria-hidden="true" viewBox="0 0 16 16" class="h-4 w-4 fill-current">
+                    <path d="M4.22 6.97a.75.75 0 0 1 1.06 0L8 9.69l2.72-2.72a.75.75 0 1 1 1.06 1.06L8.53 11.28a.75.75 0 0 1-1.06 0L4.22 8.03a.75.75 0 0 1 0-1.06Z" />
+                  </svg>
+                </summary>
+                <div class={exportMenuClass}>
+                  {EXPORT_FORMAT_OPTIONS.map((option) => (
+                    <button class={exportMenuItemClass(option.value)} on:click={(event) => chooseExportFormat(option.value, event)}>
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </details>
+            </div>
           </div>
         </div>
         <If condition={exportError}>
