@@ -287,18 +287,35 @@ module openGridFromMask(
         enable_backside_screw_hole = backside_screw_hole && board_type != "Heavy";
 
         union() {
-            up(tile_thickness_local + 0.01)
-                cyl(d=front_head_d, h=screw_head_inset > 0 ? screw_head_inset : 0.01, anchor=TOP)
-                    attach(BOT, TOP)
-                        cyl(d2=front_head_d, d1=screw_diameter, h=front_cs_h)
-                            attach(BOT, TOP)
-                                cyl(d=screw_diameter, h=tile_thickness_local + 0.02);
+            through_h = tile_thickness_local + 0.02;
+            front_head_h = screw_head_inset > 0 ? screw_head_inset : 0.01;
+            back_head_h = backside_screw_head_inset > 0 ? backside_screw_head_inset : 0.01;
+            front_head_z = tile_thickness_local - front_head_h;
+            front_cone_z = front_head_z - front_cs_h;
+            back_head_z = -0.01;
+            back_cone_z = back_head_z + back_head_h;
+
+            // Keep the browser and native exports aligned by using basic
+            // OpenSCAD cylinder primitives instead of BOSL2 attach chains.
+            down(0.01)
+                cylinder(d=screw_diameter, h=through_h);
+
+            if (front_cs_h > 0)
+                up(front_cone_z)
+                    cylinder(d1=screw_diameter, d2=front_head_d, h=front_cs_h);
+
+            up(front_head_z)
+                cylinder(d=front_head_d, h=front_head_h + 0.01);
 
             if (enable_backside_screw_hole)
-                down(0.01)
-                    cyl(d=back_head_d, h=backside_screw_head_inset > 0 ? backside_screw_head_inset : 0.01, anchor=BOT)
-                        attach(TOP, BOT)
-                            cyl(d1=back_head_d, d2=screw_diameter, h=back_cs_h);
+                union() {
+                    up(back_head_z)
+                        cylinder(d=back_head_d, h=back_head_h + 0.01);
+
+                    if (back_cs_h > 0)
+                        up(back_cone_z)
+                            cylinder(d1=back_head_d, d2=screw_diameter, h=back_cs_h);
+                }
         }
     }
 

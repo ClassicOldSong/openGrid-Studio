@@ -1,4 +1,5 @@
 import { signal, $, watch, onDispose, For, If, read } from 'refui';
+import RealtimePreview from './RealtimePreview.jsx'
 
 // --- Constants & Pure Utils ---
 
@@ -504,6 +505,11 @@ const NodeGlyph = ({ kind, state, x, y, dir }) => {
 export default function App() {
   const themeMode = signal(DEFAULT_CONFIG.themeMode);
   const systemPrefersDark = signal(false);
+  const exportInFlight = signal(false);
+  const exportError = signal('');
+  const previewMesh = signal(null);
+  const previewLoading = signal(true);
+  const previewError = signal('');
   const fullOrLite = signal(DEFAULT_CONFIG.fullOrLite);
   const tileSizeValue = signal(DEFAULT_CONFIG.tileSizeValue);
   const tileThicknessValue = signal(DEFAULT_CONFIG.tileThicknessValue);
@@ -535,6 +541,25 @@ export default function App() {
 
   const showModal = signal(false);
   let persistConfig = true;
+  const exportWorker = new Worker(new URL('./export-worker.js', import.meta.url), { type: 'module' });
+  let workerRequestId = 0;
+  const pendingWorkerRequests = new Map();
+
+  exportWorker.postMessage({ type: 'warmup' });
+
+  exportWorker.onmessage = ({ data }) => {
+    const pending = pendingWorkerRequests.get(data.id);
+    if (!pending) return;
+    pendingWorkerRequests.delete(data.id);
+    if (data.ok) pending.resolve(data);
+    else pending.reject(new Error(data.error));
+  };
+
+  exportWorker.onerror = (event) => {
+    const error = event.message || 'Export worker failed.';
+    for (const pending of pendingWorkerRequests.values()) pending.reject(new Error(error));
+    pendingWorkerRequests.clear();
+  };
 
   const applyConfig = (config) => {
     themeMode.value = config.themeMode ?? DEFAULT_CONFIG.themeMode;
@@ -614,6 +639,12 @@ export default function App() {
     });
   }
 
+  onDispose(() => {
+    for (const pending of pendingWorkerRequests.values()) pending.reject(new Error('Worker task was interrupted.'));
+    pendingWorkerRequests.clear();
+    exportWorker.terminate();
+  });
+
   // Load from local storage
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -648,7 +679,7 @@ export default function App() {
 
   const topo = $(() => deriveTopology(maskGrid.value, width.value, height.value));
   const exportGrid = $(() => sanitizeMask(maskGrid.value, width.value, height.value));
-  const exportText = $(() => buildEntryScad({
+  const exportConfig = $(() => ({
     exportGrid: exportGrid.value,
     fullOrLite: fullOrLite.value,
     tileSizeValue: tileSizeValue.value,
@@ -674,6 +705,7 @@ export default function App() {
     interfaceSeparationValue: interfaceSeparationValue.value,
     circleSegmentsValue: circleSegmentsValue.value,
   }));
+  const exportText = $(() => buildEntryScad(exportConfig.value));
 
   const updateSize = (nextW, nextH, offsetX = 0, offsetY = 0) => {
     const nw = Math.max(1, nextW);
@@ -729,14 +761,38 @@ export default function App() {
     } catch { }
   };
 
-  const downloadScad = () => {
-    const element = document.createElement('a');
-    const file = new Blob([exportText.value], { type: 'text/plain' });
-    element.href = URL.createObjectURL(file);
-    element.download = 'opengrid_design.scad';
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
+  const requestWorker = (type, payload = {}) => new Promise((resolve, reject) => {
+    const id = ++workerRequestId;
+    pendingWorkerRequests.set(id, { resolve, reject });
+    exportWorker.postMessage({ id, type, ...payload });
+  });
+
+  const renderStl = (config) => requestWorker('render-stl', { config });
+  const renderPreviewMesh = (config) => requestWorker('preview-mesh', { config });
+
+  const downloadStl = async () => {
+    if (exportInFlight.value) return;
+    exportInFlight.value = true;
+    exportError.value = '';
+    let objectUrl = null;
+
+    try {
+      const { stl, logs } = await renderStl(exportConfig.value);
+      const blob = new Blob([new Uint8Array(stl)], { type: 'model/stl' });
+      objectUrl = URL.createObjectURL(blob);
+      const element = document.createElement('a');
+      element.href = objectUrl;
+      element.download = 'opengrid_design.stl';
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
+      if (logs?.length) console.info('STL export:', logs.join('\n'));
+    } catch (error) {
+      exportError.value = error instanceof Error ? error.message : 'STL export failed.';
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      exportInFlight.value = false;
+    }
   };
 
   const clearConfiguration = () => {
@@ -814,6 +870,41 @@ export default function App() {
         ? 'bg-white text-gray-900 shadow-sm dark:bg-slate-800 dark:text-slate-100'
         : 'text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200',
     ].join(' ');
+  });
+  const exportButtonClass = $(() => [
+    primaryButtonClass,
+    exportInFlight.value ? 'cursor-wait opacity-70' : '',
+  ].join(' '));
+
+  let previewTimer = null;
+  let previewSequence = 0;
+
+  const queuePreviewRender = (config) => {
+    if (previewTimer) clearTimeout(previewTimer);
+    previewTimer = setTimeout(async () => {
+      const sequence = ++previewSequence;
+      previewLoading.value = true;
+      previewError.value = '';
+
+      try {
+        const { mesh } = await renderPreviewMesh(config);
+        if (sequence !== previewSequence) return;
+        previewMesh.value = mesh;
+        previewLoading.value = false;
+      } catch (error) {
+        if (sequence !== previewSequence) return;
+        previewError.value = error instanceof Error ? error.message : 'Preview generation failed.';
+        previewLoading.value = false;
+      }
+    }, 120);
+  };
+
+  watch(() => {
+    queuePreviewRender(exportConfig.value);
+  });
+
+  onDispose(() => {
+    if (previewTimer) clearTimeout(previewTimer);
   });
 
   const ResizeButtons = ({ onPlus, onMinus, vertical }) => (
@@ -940,7 +1031,9 @@ export default function App() {
                     <input type="number" class={compactInputClass} value={adhesiveBaseThicknessValue} on:input={(e) => adhesiveBaseThicknessValue.value = Number(e.target.value) || 0} />
                   </div>
                 </div>
-              )}{() => (
+              )}</If>
+
+              <If condition={fullOrLite.eq('Full')}>{() => (
                 <div class={sectionClass}>
                   <div class={sectionTitleClass}>Backside Screws</div>
                   <label class={toggleLabelClass}>
@@ -1025,97 +1118,115 @@ export default function App() {
             <button class={secondaryButtonClass} on:click={copy}>
               Copy SCAD
             </button>
-            <button class={primaryButtonClass} on:click={downloadScad}>
-              Download .scad
+            <button class={exportButtonClass} on:click={downloadStl} prop:disabled={exportInFlight}>
+              {$(() => exportInFlight.value ? 'Rendering STL...' : 'Download STL')}
             </button>
           </div>
         </div>
+        <If condition={exportError}>
+          {() => (
+            <div class="px-8 py-3 border-b border-rose-200 bg-rose-50 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+              {exportError}
+            </div>
+          )}
+        </If>
 
         {/* Editor Surface */}
         <div class="flex-1 overflow-x-auto overflow-y-auto p-12 flex bg-gray-50/50 relative scrollbar-hide dark:bg-slate-900/40">
-          <div class="flex min-w-max min-h-full flex-col items-center justify-center gap-6 m-auto">
-            <ResizeButtons onPlus={() => updateSize(width.value, height.value + 1, 0, 1)} onMinus={() => updateSize(width.value, height.value - 1, 0, -1)} />
-            <div class="flex items-center gap-6">
-              <ResizeButtons vertical onPlus={() => updateSize(width.value + 1, height.value, 1, 0)} onMinus={() => updateSize(width.value - 1, height.value, -1, 0)} />
-              <div class="bg-white rounded-2xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-gray-100 flex items-center justify-center dark:bg-slate-900 dark:border-slate-700 dark:shadow-[0_24px_80px_rgba(2,6,23,0.55)]">
-                <svg attr:width={svgW} attr:height={svgH} class="rounded-lg border border-gray-100 bg-white dark:border-slate-700">
-                  <rect attr:x={pad} attr:y={pad} attr:width={boardW} attr:height={boardH} attr:fill="#000" />
+          <div class="flex min-w-max min-h-full flex-col xl:flex-row items-center justify-center gap-8 m-auto">
+            <div class="flex min-w-max min-h-full flex-col items-center justify-center gap-6">
+              <ResizeButtons onPlus={() => updateSize(width.value, height.value + 1, 0, 1)} onMinus={() => updateSize(width.value, height.value - 1, 0, -1)} />
+              <div class="flex items-center gap-6">
+                <ResizeButtons vertical onPlus={() => updateSize(width.value + 1, height.value, 1, 0)} onMinus={() => updateSize(width.value - 1, height.value, -1, 0)} />
+                <div class="bg-white rounded-2xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-gray-100 flex items-center justify-center dark:bg-slate-900 dark:border-slate-700 dark:shadow-[0_24px_80px_rgba(2,6,23,0.55)]">
+                  <svg attr:width={svgW} attr:height={svgH} class="rounded-lg border border-gray-100 bg-white dark:border-slate-700">
+                    <rect attr:x={pad} attr:y={pad} attr:width={boardW} attr:height={boardH} attr:fill="#000" />
 
-                  <For entries={tiles} track="id">
-                    {({ item: { tx, ty, gx, gy } }) => {
-                      const active = $(() => tileFill(read(getMask(maskGrid.value, gx, gy))));
-                      return (
-                        <If condition={$(() => !active.value)}>
-                          {() => (
-                            <rect
-                              attr:x={pad + tx * tileSize} attr:y={pad + ty * tileSize}
-                              attr:width={tileSize} attr:height={tileSize}
-                              attr:fill="#fff"
-                            />
-                          )}
-                        </If>
-                      );
-                    }}
-                  </For>
+                    <For entries={tiles} track="id">
+                      {({ item: { tx, ty, gx, gy } }) => {
+                        const active = $(() => tileFill(read(getMask(maskGrid.value, gx, gy))));
+                        return (
+                          <If condition={$(() => !active.value)}>
+                            {() => (
+                              <rect
+                                attr:x={pad + tx * tileSize} attr:y={pad + ty * tileSize}
+                                attr:width={tileSize} attr:height={tileSize}
+                                attr:fill="#fff"
+                              />
+                            )}
+                          </If>
+                        );
+                      }}
+                    </For>
 
-                  <For entries={tiles} track="id">
-                    {({ item: { tx, ty, gx, gy } }) => {
-                      const active = $(() => tileFill(read(getMask(maskGrid.value, gx, gy))));
-                      const x = pad + tx * tileSize + half;
-                      const y = pad + ty * tileSize + half;
-                      const sq = squareTile(x, y, tileSize);
-                      const border = 3;
+                    <For entries={tiles} track="id">
+                      {({ item: { tx, ty, gx, gy } }) => {
+                        const active = $(() => tileFill(read(getMask(maskGrid.value, gx, gy))));
+                        const x = pad + tx * tileSize + half;
+                        const y = pad + ty * tileSize + half;
+                        const sq = squareTile(x, y, tileSize);
+                        const border = 3;
 
-                      return (
-                        <If condition={active}>
-                          {() => (
-                            <g>
-                              <rect attr:x={sq.x} attr:y={sq.y} attr:width={sq.w} attr:height={sq.h} attr:fill="#000" />
-                              <rect attr:x={sq.x + border} attr:y={sq.y + border} attr:width={sq.w - border * 2} attr:height={sq.h - border * 2} attr:fill="#2563eb" />
-                            </g>
-                          )}
-                        </If>
-                      );
-                    }}
-                  </For>
+                        return (
+                          <If condition={active}>
+                            {() => (
+                              <g>
+                                <rect attr:x={sq.x} attr:y={sq.y} attr:width={sq.w} attr:height={sq.h} attr:fill="#000" />
+                                <rect attr:x={sq.x + border} attr:y={sq.y + border} attr:width={sq.w - border * 2} attr:height={sq.h - border * 2} attr:fill="#2563eb" />
+                              </g>
+                            )}
+                          </If>
+                        );
+                      }}
+                    </For>
 
-                  <For entries={nodes} track="id">
-                    {({ item: { gx, gy } }) => {
-                      const { x, y } = toNodeXY(gx, gy);
-                      const kind = $(() => topo.value.nodeKind[gy]?.[gx] ?? 'none');
-                      const dir = $(() => topo.value.nodeDir[gy]?.[gx] ?? null);
-                      const state = $(() => nodeState(kind.value, getMask(maskGrid.value, gx, gy)));
-                      return (
-                        <g>
-                          <NodeGlyph kind={kind} state={state} x={x} y={y} dir={dir} />
-                        </g>
-                      );
-                    }}
-                  </For>
+                    <For entries={nodes} track="id">
+                      {({ item: { gx, gy } }) => {
+                        const { x, y } = toNodeXY(gx, gy);
+                        const kind = $(() => topo.value.nodeKind[gy]?.[gx] ?? 'none');
+                        const dir = $(() => topo.value.nodeDir[gy]?.[gx] ?? null);
+                        const state = $(() => nodeState(kind.value, getMask(maskGrid.value, gx, gy)));
+                        return (
+                          <g>
+                            <NodeGlyph kind={kind} state={state} x={x} y={y} dir={dir} />
+                          </g>
+                        );
+                      }}
+                    </For>
 
-                  <For entries={tiles} track="id">
-                    {({ item: { tx, ty, gx, gy } }) => (
-                      <rect
-                        attr:x={pad + tx * tileSize} attr:y={pad + ty * tileSize}
-                        attr:width={tileSize} attr:height={tileSize}
-                        attr:fill="transparent" on:click={() => toggleTile(gx, gy)} style="cursor: pointer"
-                      />
-                    )}
-                  </For>
+                    <For entries={tiles} track="id">
+                      {({ item: { tx, ty, gx, gy } }) => (
+                        <rect
+                          attr:x={pad + tx * tileSize} attr:y={pad + ty * tileSize}
+                          attr:width={tileSize} attr:height={tileSize}
+                          attr:fill="transparent" on:click={() => toggleTile(gx, gy)} style="cursor: pointer"
+                        />
+                      )}
+                    </For>
 
-                  <For entries={nodes} track="id">
-                    {({ item: { gx, gy } }) => {
-                      const { x, y } = toNodeXY(gx, gy);
-                      return (
-                        <circle attr:cx={x} attr:cy={y} attr:r={20} attr:fill="transparent" on:click={() => cycleNode(gx, gy)} style="cursor: pointer" />
-                      );
-                    }}
-                  </For>
-                </svg>
+                    <For entries={nodes} track="id">
+                      {({ item: { gx, gy } }) => {
+                        const { x, y } = toNodeXY(gx, gy);
+                        return (
+                          <circle attr:cx={x} attr:cy={y} attr:r={20} attr:fill="transparent" on:click={() => cycleNode(gx, gy)} style="cursor: pointer" />
+                        );
+                      }}
+                    </For>
+                  </svg>
+                </div>
+                <ResizeButtons vertical onPlus={() => updateSize(width.value + 1, height.value)} onMinus={() => updateSize(width.value - 1, height.value)} />
               </div>
-              <ResizeButtons vertical onPlus={() => updateSize(width.value + 1, height.value)} onMinus={() => updateSize(width.value - 1, height.value)} />
+              <ResizeButtons onPlus={() => updateSize(width.value, height.value + 1)} onMinus={() => updateSize(width.value, height.value - 1)} />
             </div>
-            <ResizeButtons onPlus={() => updateSize(width.value, height.value + 1)} onMinus={() => updateSize(width.value, height.value - 1)} />
+
+            <div class="w-[360px] h-[420px] md:w-[420px] md:h-[520px] shrink-0">
+              <RealtimePreview
+                mesh={previewMesh}
+                loading={previewLoading}
+                error={previewError}
+                theme={resolvedTheme}
+              />
+            </div>
           </div>
         </div>
       </div>

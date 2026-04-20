@@ -17,6 +17,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "manifold-3d": "^3.4.1",
     "refui": "^0.17.1"
   },
   "devDependencies": {
