@@ -52,4 +52,4 @@ pnpm preview
 
 ## License
 
-Apache-2.0
+The main project is licensed under Apache-2.0, the `opengrid_generator.scad` is released as CC-BY, and logo in `public/logo.png` as CC-BY-NC-SA.
