@@ -25,6 +25,14 @@ const EXPORT_FORMAT_OPTIONS = [
 	},
 	{ value: "3mf", label: "3MF", extension: "3mf", mimeType: "model/3mf" },
 ];
+const BOARD_DIMENSION_MIN = 1;
+const TOP_COLUMN_MIN = 0;
+const STACK_COUNT_MIN = 1;
+const TILE_SIZE_MIN = Math.ceil(Math.sqrt(2.6 ** 2 * 2) + 4.2);
+const MEASUREMENT_MIN = 0;
+const POSITIVE_MEASUREMENT_MIN = 0.1;
+const SEGMENTS_MIN = 3;
+const COUNTERSINK_DEGREE_MIN = 1;
 const DEFAULT_CONFIG = {
 	themeMode: "auto",
 	exportFormat: "stl-binary",
@@ -60,6 +68,16 @@ const DEFAULT_CONFIG = {
 
 function clamp(v, lo, hi) {
 	return Math.max(lo, Math.min(hi, v));
+}
+
+function clampNumberInput(raw, min, max = Infinity, fallback = min) {
+	const value = Number(raw);
+	if (!Number.isFinite(value)) return fallback;
+	return clamp(value, min, max);
+}
+
+function clampIntegerInput(raw, min, max, fallback = min) {
+	return Math.round(clampNumberInput(raw, min, max, fallback));
 }
 
 function getExportFormatMeta(format) {
@@ -734,6 +752,7 @@ export default function App() {
 	const maskGrid = signal(cloneGrid(DEFAULT_CONFIG.maskGrid));
 
 	const showModal = signal(false);
+	const showAboutModal = signal(false);
 	let persistConfig = true;
 	const exportWorker = new Worker(
 		new URL("./export-worker.js", import.meta.url),
@@ -953,8 +972,8 @@ export default function App() {
 	const exportText = $(() => buildEntryScad(exportConfig.value));
 
 	const updateSize = (nextW, nextH, offsetX = 0, offsetY = 0) => {
-		const nw = Math.max(1, nextW);
-		const nh = Math.max(1, nextH);
+		const nw = Math.max(BOARD_DIMENSION_MIN, nextW);
+		const nh = Math.max(BOARD_DIMENSION_MIN, nextH);
 		if (
 			nw !== width.value ||
 			nh !== height.value ||
@@ -972,6 +991,12 @@ export default function App() {
 			);
 			width.value = nw;
 			height.value = nh;
+			top1Text.value = String(
+				clampIntegerInput(top1Text.value, TOP_COLUMN_MIN, nw, TOP_COLUMN_MIN),
+			);
+			top2Text.value = String(
+				clampIntegerInput(top2Text.value, TOP_COLUMN_MIN, nw, TOP_COLUMN_MIN),
+			);
 		}
 	};
 
@@ -1148,6 +1173,8 @@ export default function App() {
 		"w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-gray-700 font-bold text-xs transition dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700";
 	const secondaryButtonClass =
 		"bg-white border border-gray-200 text-gray-700 rounded-xl h-10 px-4 text-sm font-bold hover:border-gray-300 transition flex items-center gap-2 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600";
+	const aboutButtonClass =
+		"h-10 pr-2 text-sm font-bold text-gray-500 hover:text-gray-700 transition flex items-center dark:text-slate-400 dark:hover:text-slate-200";
 	const primaryButtonClass =
 		"bg-blue-600 text-white rounded-xl h-10 px-4 text-sm font-bold hover:bg-blue-700 transition flex items-center gap-2 shadow-lg shadow-blue-600/20 dark:bg-blue-500 dark:hover:bg-blue-400";
 	const modalActionClass =
@@ -1291,11 +1318,16 @@ export default function App() {
 										<input
 											type="number"
 											class={inputClass}
-											min={1}
+											min={BOARD_DIMENSION_MIN}
 											value={width}
 											on:input={(e) =>
 												updateSize(
-													Math.max(1, Number(e.target.value) || 1),
+													clampIntegerInput(
+														e.target.value,
+														BOARD_DIMENSION_MIN,
+														Infinity,
+														width.value,
+													),
 													height.value,
 												)
 											}
@@ -1306,12 +1338,17 @@ export default function App() {
 										<input
 											type="number"
 											class={inputClass}
-											min={1}
+											min={BOARD_DIMENSION_MIN}
 											value={height}
 											on:input={(e) =>
 												updateSize(
 													width.value,
-													Math.max(1, Number(e.target.value) || 1),
+													clampIntegerInput(
+														e.target.value,
+														BOARD_DIMENSION_MIN,
+														Infinity,
+														height.value,
+													),
 												)
 											}
 										/>
@@ -1324,8 +1361,19 @@ export default function App() {
 										<input
 											type="number"
 											class={inputClass}
+											min={TOP_COLUMN_MIN}
+											max={width}
 											value={top1Text}
-											on:input={(e) => (top1Text.value = e.target.value)}
+											on:input={(e) =>
+												(top1Text.value = String(
+													clampIntegerInput(
+														e.target.value,
+														TOP_COLUMN_MIN,
+														width.value,
+														Number(top1Text.value) || TOP_COLUMN_MIN,
+													),
+												))
+											}
 										/>
 									</div>
 									<div class="grid gap-1">
@@ -1333,8 +1381,19 @@ export default function App() {
 										<input
 											type="number"
 											class={inputClass}
+											min={TOP_COLUMN_MIN}
+											max={width}
 											value={top2Text}
-											on:input={(e) => (top2Text.value = e.target.value)}
+											on:input={(e) =>
+												(top2Text.value = String(
+													clampIntegerInput(
+														e.target.value,
+														TOP_COLUMN_MIN,
+														width.value,
+														Number(top2Text.value) || TOP_COLUMN_MIN,
+													),
+												))
+											}
 										/>
 									</div>
 									<button
@@ -1392,9 +1451,15 @@ export default function App() {
 										<input
 											type="number"
 											class={compactInputClass}
+											min={STACK_COUNT_MIN}
 											value={stackCountValue}
 											on:input={(e) =>
-												(stackCountValue.value = Number(e.target.value) || 0)
+												(stackCountValue.value = clampIntegerInput(
+													e.target.value,
+													STACK_COUNT_MIN,
+													Infinity,
+													stackCountValue.value,
+												))
 											}
 										/>
 									</div>
@@ -1415,10 +1480,16 @@ export default function App() {
 											type="number"
 											class={compactInputClass}
 											step={0.1}
+											min={MEASUREMENT_MIN}
 											value={interfaceThicknessValue}
 											on:input={(e) =>
 												(interfaceThicknessValue.value =
-													Number(e.target.value) || 0)
+													clampNumberInput(
+														e.target.value,
+														MEASUREMENT_MIN,
+														Infinity,
+														interfaceThicknessValue.value,
+													))
 											}
 										/>
 									</div>
@@ -1428,10 +1499,16 @@ export default function App() {
 											type="number"
 											class={compactInputClass}
 											step={0.1}
+											min={MEASUREMENT_MIN}
 											value={interfaceSeparationValue}
 											on:input={(e) =>
 												(interfaceSeparationValue.value =
-													Number(e.target.value) || 0)
+													clampNumberInput(
+														e.target.value,
+														MEASUREMENT_MIN,
+														Infinity,
+														interfaceSeparationValue.value,
+													))
 											}
 										/>
 									</div>
@@ -1446,32 +1523,42 @@ export default function App() {
 											label: "Screw Diameter",
 											step: 0.1,
 											sig: screwDiameterValue,
+											min: POSITIVE_MEASUREMENT_MIN,
 										},
 										{
 											label: "Head Diameter",
 											step: 0.1,
 											sig: screwHeadDiameterValue,
+											min: POSITIVE_MEASUREMENT_MIN,
 										},
 										{
 											label: "Head Inset",
 											step: 0.1,
 											sig: screwHeadInsetValue,
+											min: MEASUREMENT_MIN,
 										},
 										{
 											label: "Sink Deg",
 											step: 0.1,
 											sig: screwHeadCountersunkDegreeValue,
+											min: COUNTERSINK_DEGREE_MIN,
 										},
-									].map(({ label, sig, step }) => (
+									].map(({ label, sig, step, min, max }) => (
 										<div class="grid gap-1">
 											<label class={fieldLabelClass}>{label}</label>
 											<input
 												type="number"
 												class={compactInputClass}
 												step={step}
+												min={min}
 												value={sig}
 												on:input={(e) =>
-													(sig.value = Number(e.target.value) || 0)
+													(sig.value = clampNumberInput(
+														e.target.value,
+														min,
+														max ?? Infinity,
+														sig.value,
+													))
 												}
 											/>
 										</div>
@@ -1511,22 +1598,30 @@ export default function App() {
 													label: "Head Shrink",
 													step: 0.1,
 													sig: backsideScrewHeadDiameterShrinkValue,
+													min: MEASUREMENT_MIN,
 												},
 												{
 													label: "Head Inset",
 													step: 0.1,
 													sig: backsideScrewHeadInsetValue,
+													min: MEASUREMENT_MIN,
 												},
-											].map(({ label, sig, step }) => (
+											].map(({ label, sig, step, min, max }) => (
 												<div class="grid gap-1">
 													<label class={fieldLabelClass}>{label}</label>
 													<input
 														type="number"
 														class={compactInputClass}
 														step={step}
+														min={min}
 														value={sig}
 														on:input={(e) =>
-															(sig.value = Number(e.target.value) || 0)
+															(sig.value = clampNumberInput(
+																e.target.value,
+																min,
+																max ?? Infinity,
+																sig.value,
+															))
 														}
 													/>
 												</div>
@@ -1565,15 +1660,21 @@ export default function App() {
 										</label>
 										<div class="grid gap-1">
 											<label class={fieldLabelClass}>Thickness</label>
-											<input
-												type="number"
-												class={compactInputClass}
-												value={adhesiveBaseThicknessValue}
-												on:input={(e) =>
-													(adhesiveBaseThicknessValue.value =
-														Number(e.target.value) || 0)
-												}
-											/>
+										<input
+											type="number"
+											class={compactInputClass}
+											min={MEASUREMENT_MIN}
+											value={adhesiveBaseThicknessValue}
+											on:input={(e) =>
+												(adhesiveBaseThicknessValue.value =
+													clampNumberInput(
+														e.target.value,
+														MEASUREMENT_MIN,
+														Infinity,
+														adhesiveBaseThicknessValue.value,
+													))
+											}
+										/>
 										</div>
 									</div>
 								)}
@@ -1583,32 +1684,42 @@ export default function App() {
 								<div class={sectionTitleClass}>Dimensions</div>
 								<div class="grid grid-cols-2 gap-x-4 gap-y-3">
 									{[
-										{ label: "Tile Size", step: 1, sig: tileSizeValue },
+										{
+											label: "Tile Size",
+											step: 1,
+											sig: tileSizeValue,
+											min: TILE_SIZE_MIN,
+											integer: true,
+										},
 										{
 											label: "Thickness",
 											type: "Full",
 											step: 0.1,
 											sig: tileThicknessValue,
+											min: POSITIVE_MEASUREMENT_MIN,
 										},
 										{
 											label: "Lite Thickness",
 											type: "Lite",
 											step: 0.1,
 											sig: liteTileThicknessValue,
+											min: POSITIVE_MEASUREMENT_MIN,
 										},
 										{
 											label: "Heavy Thickness",
 											type: "Heavy",
 											step: 0.1,
 											sig: heavyTileThicknessValue,
+											min: POSITIVE_MEASUREMENT_MIN,
 										},
 										{
 											label: "Heavy Gap",
 											type: "Heavy",
 											step: 0.1,
 											sig: heavyTileGapValue,
+											min: MEASUREMENT_MIN,
 										},
-									].map(({ label, type, sig, step }) => (
+									].map(({ label, type, sig, step, min, max, integer }) => (
 										<If
 											condition={() =>
 												type ? fullOrLite.value === type : true
@@ -1621,9 +1732,22 @@ export default function App() {
 														type="number"
 														class={compactInputClass}
 														step={step}
+														min={min}
 														value={sig}
 														on:input={(e) =>
-															(sig.value = Number(e.target.value) || 0)
+															(sig.value = integer
+																? clampIntegerInput(
+																	e.target.value,
+																	min,
+																	max ?? Infinity,
+																	sig.value,
+																)
+																: clampNumberInput(
+																	e.target.value,
+																	min,
+																	max ?? Infinity,
+																	sig.value,
+																))
 														}
 													/>
 												</div>
@@ -1641,10 +1765,16 @@ export default function App() {
 										<input
 											type="number"
 											class={compactInputClass}
+											min={SEGMENTS_MIN}
 											value={circleSegmentsValue}
 											on:input={(e) =>
 												(circleSegmentsValue.value =
-													Number(e.target.value) || 0)
+													clampIntegerInput(
+														e.target.value,
+														SEGMENTS_MIN,
+														Infinity,
+														circleSegmentsValue.value,
+													))
 											}
 										/>
 									</div>
@@ -1674,6 +1804,12 @@ export default function App() {
 						<h1 class="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-slate-400">
 							openGrid Studio
 						</h1>
+						<button
+							class={aboutButtonClass}
+							on:click={() => (showAboutModal.value = true)}
+						>
+							ⓘ
+						</button>
 						<div class={previewBarClass}>
 							<button
 								class={previewOptionClass("2d")}
@@ -2004,6 +2140,117 @@ export default function App() {
 									}}
 								>
 									Copy to Clipboard
+								</button>
+							</div>
+						</div>
+					</div>
+				)}
+			</If>
+
+			{/* About Modal */}
+			<If condition={showAboutModal}>
+				{() => (
+					<div class="fixed inset-0 z-[100] flex items-center justify-center p-8">
+						<div
+							class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm"
+							on:click={() => (showAboutModal.value = false)}
+						></div>
+						<div class="bg-white rounded-3xl w-full max-w-2xl flex flex-col shadow-2xl overflow-hidden relative animate-modal-in dark:bg-slate-950 dark:border dark:border-slate-800">
+							<div class="p-6 border-b border-gray-200 flex justify-between items-center dark:border-slate-800">
+								<h3 class="text-xl font-bold text-gray-900 dark:text-slate-100">
+									About openGrid Studio
+								</h3>
+								<button
+									class="text-gray-400 hover:text-gray-600 transition dark:text-slate-500 dark:hover:text-slate-300"
+									on:click={() => (showAboutModal.value = false)}
+								>
+									<svg
+										class="w-6 h-6"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M6 18L18 6M6 6l12 12"
+										></path>
+									</svg>
+								</button>
+							</div>
+							<div class="p-6 bg-gray-50 grid gap-5 text-sm text-gray-700 dark:bg-slate-900/60 dark:text-slate-300">
+								<div class="grid gap-2">
+									<div class="text-xs font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-slate-500">
+										Project
+									</div>
+									<p>
+										openGrid Studio is a browser-based editor for designing openGrid boards with
+										fast 2D editing, realtime 3D preview, and direct export.
+									</p>
+									<p>
+										Repository:{" "}
+										<a
+											class="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200"
+											href="https://github.com/ClassicOldSong/openGrid-Studio"
+											target="_blank"
+											rel="noreferrer"
+										>
+											github.com/ClassicOldSong/openGrid-Studio
+										</a>
+									</p>
+								</div>
+								<div class="grid gap-2">
+									<div class="text-xs font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-slate-500">
+										Credits
+									</div>
+									<p>
+										Original openGrid project: based on the original openGrid design and
+										generator.
+										{" "}
+										<a
+											class="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200"
+											href="https://www.opengrid.world/"
+											target="_blank"
+											rel="noreferrer"
+										>
+											opengrid.world
+										</a>
+									</p>
+									<p>
+										Manifold: powered by the Manifold geometry kernel and the{" "}
+										<code>manifold-3d</code> browser bindings used for realtime preview and
+										export.
+										{" "}
+										<a
+											class="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200"
+											href="https://github.com/elalish/manifold"
+											target="_blank"
+											rel="noreferrer"
+										>
+											github.com/elalish/manifold
+										</a>
+									</p>
+									<p>
+										Yukino Song: openGrid Studio by Yukino Song.
+										{" "}
+										<a
+											class="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200"
+											href="https://x.com/ClassicOldSong"
+											target="_blank"
+											rel="noreferrer"
+										>
+											x.com/ClassicOldSong
+										</a>
+									</p>
+								</div>
+							</div>
+							<div class="p-6 border-t border-gray-200 flex justify-end dark:border-slate-800">
+								<button
+									class={modalPrimaryActionClass}
+									on:click={() => (showAboutModal.value = false)}
+								>
+									Close
 								</button>
 							</div>
 						</div>
