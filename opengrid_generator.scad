@@ -3,6 +3,7 @@ openGrid mask-driven generator module
 
 Usage from a JS-generated entry SCAD:
 
+```
 use <opengrid_generator.scad>
 
 mask = [
@@ -42,6 +43,14 @@ openGridFromMask(
   spin = 0,
   orient = UP
 );
+```
+
+Credit to
+    @David D on Printables for openGrid https://www.printables.com/@DavidD
+    Katie and her community at Hands on Katie on Youtube, Patreon, and Discord https://handsonkatie.com/
+    Pedro Leite for research and contributions on script performance improvements https://makerworld.com/en/@pedroleite
+    mitufy for screw position options and formatting improvements
+    Yukino Song for online generator https://github.com/ClassicOldSong
 */
 
 include <BOSL2/std.scad>

@@ -1,7 +1,7 @@
 {
-  "name": "opengrid-editor",
+  "name": "opengrid-studio",
   "version": "1.0.0",
-  "description": "",
+  "description": "Design custom openGrid boards in the browser with fast 2D editing, realtime 3D preview, and direct STL or 3MF export.",
   "keywords": [
     "opengrid",
     "generator"
