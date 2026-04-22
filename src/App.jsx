@@ -625,8 +625,8 @@ const EdgeGlyph = ({ state, x, y, dir, outerFill = "#000", innerFill = "#fff" })
 	const inner = 6.4;
 	const hole = 5.0;
 
-	const direction = $(() => read(dir));
-	const currentState = $(() => read(state));
+	const direction = dir;
+	const currentState = state;
 
 	const points = $(() => {
 		const d = direction.value;
@@ -657,10 +657,10 @@ const EdgeGlyph = ({ state, x, y, dir, outerFill = "#000", innerFill = "#fff" })
 	return (
 		<g>
 			<polygon attr:points={points} attr:fill={outerFill} />
-			<If condition={$(() => currentState.value === "chamfer")}>
+			<If condition={() => currentState.value === "chamfer"}>
 				{() => <polygon attr:points={innerPoints} attr:fill={innerFill} />}
 			</If>
-			<If condition={$(() => currentState.value === "hole")}>
+			<If condition={() => currentState.value === "hole"}>
 				{() => (
 					<circle attr:cx={x} attr:cy={y} attr:r={hole} attr:fill={innerFill} />
 				)}
@@ -674,17 +674,17 @@ const CenterGlyph = ({ state, x, y, outerFill = "#000", innerFill = "#fff" }) =>
 	const inner = 6.4;
 	const hole = 5.0;
 
-	const currentState = $(() => read(state));
+	const currentState = state;
 
 	return (
 		<g>
 			<polygon attr:points={diamondPoints(x, y, outer)} attr:fill={outerFill} />
-			<If condition={$(() => currentState.value === "chamfer")}>
+			<If condition={() => currentState.value === "chamfer"}>
 				{() => (
 					<polygon attr:points={diamondPoints(x, y, inner)} attr:fill={innerFill} />
 				)}
 			</If>
-			<If condition={$(() => currentState.value === "hole")}>
+			<If condition={() => currentState.value === "hole"}>
 				{() => (
 					<circle attr:cx={x} attr:cy={y} attr:r={hole} attr:fill={innerFill} />
 				)}
@@ -784,6 +784,16 @@ export default function App() {
 	const showModal = signal(false);
 	const showAboutModal = signal(false);
 	const layoutMedia = window.matchMedia(MOBILE_LAYOUT_MEDIA_QUERY);
+	const userAgent = navigator.userAgent;
+	const isIOSWebKit =
+		/iPad|iPhone|iPod/i.test(userAgent) ||
+		(navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+	const isSafariDesktop =
+		/Safari/i.test(userAgent) &&
+		!/Chrome|Chromium|CriOS|Edg|OPR|OPiOS|FxiOS|Firefox|Android/i.test(
+			userAgent,
+		);
+	const isWebKitEngine = signal(isIOSWebKit || isSafariDesktop);
 	const isMobileLayout = signal(layoutMedia.matches);
 	const isDesktopLayout = $(() => !isMobileLayout.value);
 	const mobileConfigPanelOpen = signal(false);
@@ -1292,56 +1302,61 @@ export default function App() {
 	let editor2DIsDragging = false;
 	let editor2DGestureActive = false;
 	let editor2DHasManualNavigation = false;
+	const WEBKIT_EDITOR_2D_MAX_RASTER_SCALE = 2;
 
 	const svgW = $(() => width.value * tileSize + pad * 2);
 	const svgH = $(() => height.value * tileSize + pad * 2);
 	const boardW = $(() => width.value * tileSize);
 	const boardH = $(() => height.value * tileSize);
-	const get2DEditorViewMetrics = (zoom = editor2DZoom.value) => {
-		const contentWidth = svgW.value;
-		const contentHeight = svgH.value;
+	const get2DEditorDefaultScale = () => {
+		const contentWidth = Math.max(svgW.value, 1);
+		const contentHeight = Math.max(svgH.value, 1);
 		const viewportWidth = Math.max(editor2DViewportWidth.value, 1);
 		const viewportHeight = Math.max(editor2DViewportHeight.value, 1);
-		const viewportAspect = viewportWidth / viewportHeight;
-		const contentAspect = contentWidth / Math.max(contentHeight, 1);
-		const fitWidth =
-			viewportAspect > contentAspect
-				? contentHeight * viewportAspect
-				: contentWidth;
-		const fitHeight =
-			viewportAspect > contentAspect
-				? contentHeight
-				: contentWidth / Math.max(viewportAspect, 0.0001);
-		const nextZoom = clamp(zoom, EDITOR_2D_MIN_ZOOM, EDITOR_2D_MAX_ZOOM);
-		const viewWidth = fitWidth / nextZoom;
-		const viewHeight = fitHeight / nextZoom;
-		return {
-			contentWidth,
-			contentHeight,
-			fitWidth,
-			fitHeight,
-			viewWidth,
-			viewHeight,
-			maxPanX: Math.max(0, (fitWidth - viewWidth) / 2),
-			maxPanY: Math.max(0, (fitHeight - viewHeight) / 2),
-		};
+		const fitScale = Math.min(
+			viewportWidth / contentWidth,
+			viewportHeight / contentHeight,
+		);
+		const cappedScale = EDITOR_2D_INITIAL_MAX_TILE_PX / tileSize;
+		return Math.min(fitScale, cappedScale);
 	};
-	const get2DEditorViewFrame = (
+	const get2DEditorSceneFrame = (
 		zoom = editor2DZoom.value,
 		panX = editor2DPanX.value,
 		panY = editor2DPanY.value,
 	) => {
-		const metrics = get2DEditorViewMetrics(zoom);
-		const clampedPanX = clamp(panX, -metrics.maxPanX, metrics.maxPanX);
-		const clampedPanY = clamp(panY, -metrics.maxPanY, metrics.maxPanY);
-		const centerX = metrics.contentWidth / 2 + clampedPanX;
-		const centerY = metrics.contentHeight / 2 + clampedPanY;
+		const contentWidth = svgW.value;
+		const contentHeight = svgH.value;
+		const viewportWidth = Math.max(editor2DViewportWidth.value, 1);
+		const viewportHeight = Math.max(editor2DViewportHeight.value, 1);
+		const nextZoom = clamp(zoom, EDITOR_2D_MIN_ZOOM, EDITOR_2D_MAX_ZOOM);
+		const scale = get2DEditorDefaultScale() * nextZoom;
+		const renderedWidth = contentWidth * scale;
+		const renderedHeight = contentHeight * scale;
+		const baseX = (viewportWidth - renderedWidth) / 2;
+		const baseY = (viewportHeight - renderedHeight) / 2;
+		const maxPanX =
+			renderedWidth > viewportWidth ? (renderedWidth - viewportWidth) / 2 : 0;
+		const maxPanY =
+			renderedHeight > viewportHeight ? (renderedHeight - viewportHeight) / 2 : 0;
+		const clampedPanX = clamp(panX, -maxPanX, maxPanX);
+		const clampedPanY = clamp(panY, -maxPanY, maxPanY);
 		return {
-			...metrics,
+			contentWidth,
+			contentHeight,
+			viewportWidth,
+			viewportHeight,
+			scale,
+			renderedWidth,
+			renderedHeight,
+			baseX,
+			baseY,
+			maxPanX,
+			maxPanY,
 			panX: clampedPanX,
 			panY: clampedPanY,
-			left: centerX - metrics.viewWidth / 2,
-			top: centerY - metrics.viewHeight / 2,
+			left: baseX + clampedPanX,
+			top: baseY + clampedPanY,
 		};
 	};
 	const set2DEditorView = (
@@ -1350,29 +1365,15 @@ export default function App() {
 		panY = editor2DPanY.value,
 	) => {
 		const nextZoom = clamp(zoom, EDITOR_2D_MIN_ZOOM, EDITOR_2D_MAX_ZOOM);
-		const frame = get2DEditorViewFrame(nextZoom, panX, panY);
+		const frame = get2DEditorSceneFrame(nextZoom, panX, panY);
 		editor2DZoom.value = nextZoom;
 		editor2DPanX.value = frame.panX;
 		editor2DPanY.value = frame.panY;
 	};
-	const get2DEditorInitialZoom = () => {
-		const metrics = get2DEditorViewMetrics(1);
-		const fitScale = Math.min(
-			editor2DViewportWidth.value / Math.max(metrics.fitWidth, 1),
-			editor2DViewportHeight.value / Math.max(metrics.fitHeight, 1),
-		);
-		const tilePixelsAtFit = tileSize * fitScale;
-		if (tilePixelsAtFit <= EDITOR_2D_INITIAL_MAX_TILE_PX) return 1;
-		return clamp(
-			EDITOR_2D_INITIAL_MAX_TILE_PX / Math.max(tilePixelsAtFit, 1),
-			EDITOR_2D_MIN_ZOOM,
-			1,
-		);
-	};
 	const fit2DEditorInitialView = () => {
 		if (editor2DViewportWidth.value <= 1 || editor2DViewportHeight.value <= 1)
 			return;
-		set2DEditorView(get2DEditorInitialZoom(), 0, 0);
+		set2DEditorView(1, 0, 0);
 	};
 	const set2DEditorViewFromAnchor = ({
 		nextZoom,
@@ -1389,40 +1390,18 @@ export default function App() {
 			return;
 		}
 		const rect = editor2DViewportEl.getBoundingClientRect();
-		const widthPx = Math.max(rect.width, 1);
-		const heightPx = Math.max(rect.height, 1);
-		const anchorRatioX = clamp(
-			(anchorClientX - rect.left) / widthPx,
-			0,
-			1,
-		);
-		const anchorRatioY = clamp(
-			(anchorClientY - rect.top) / heightPx,
-			0,
-			1,
-		);
-		const targetRatioX = clamp(
-			(targetClientX - rect.left) / widthPx,
-			0,
-			1,
-		);
-		const targetRatioY = clamp(
-			(targetClientY - rect.top) / heightPx,
-			0,
-			1,
-		);
-		const sourceFrame = get2DEditorViewFrame(baseZoom, basePanX, basePanY);
-		const anchorX = sourceFrame.left + anchorRatioX * sourceFrame.viewWidth;
-		const anchorY = sourceFrame.top + anchorRatioY * sourceFrame.viewHeight;
-		const nextMetrics = get2DEditorViewMetrics(nextZoom);
-		const nextCenterX =
-			anchorX + (0.5 - targetRatioX) * nextMetrics.viewWidth;
-		const nextCenterY =
-			anchorY + (0.5 - targetRatioY) * nextMetrics.viewHeight;
+		const anchorX = anchorClientX - rect.left;
+		const anchorY = anchorClientY - rect.top;
+		const targetX = targetClientX - rect.left;
+		const targetY = targetClientY - rect.top;
+		const sourceFrame = get2DEditorSceneFrame(baseZoom, basePanX, basePanY);
+		const worldX = (anchorX - sourceFrame.left) / Math.max(sourceFrame.scale, 0.0001);
+		const worldY = (anchorY - sourceFrame.top) / Math.max(sourceFrame.scale, 0.0001);
+		const nextFrame = get2DEditorSceneFrame(nextZoom, 0, 0);
 		set2DEditorView(
 			nextZoom,
-			nextCenterX - nextMetrics.contentWidth / 2,
-			nextCenterY - nextMetrics.contentHeight / 2,
+			targetX - nextFrame.baseX - worldX * nextFrame.scale,
+			targetY - nextFrame.baseY - worldY * nextFrame.scale,
 		);
 	};
 	const update2DEditorViewportSize = () => {
@@ -1477,14 +1456,63 @@ export default function App() {
 			basePanY: editor2DGestureStartPanY,
 		});
 	};
-	const editor2DViewBox = $(() => {
-		const frame = get2DEditorViewFrame(
+	const editor2DViewportViewBox = $(
+		() =>
+			`0 0 ${Math.max(editor2DViewportWidth.value, 1)} ${Math.max(
+				editor2DViewportHeight.value,
+				1,
+			)}`,
+	);
+	const editor2DSceneViewBox = $(() => `0 0 ${svgW.value} ${svgH.value}`);
+	const editor2DSceneFrame = $(() =>
+		get2DEditorSceneFrame(
 			editor2DZoom.value,
 			editor2DPanX.value,
 			editor2DPanY.value,
+		),
+	);
+	const editor2DUseCssTransformPath = isWebKitEngine;
+	const editor2DSvgRasterScale = $(() => {
+		if (!editor2DUseCssTransformPath.value) return 1;
+		return clamp(
+			Math.ceil(editor2DSceneFrame.value.scale),
+			1,
+			WEBKIT_EDITOR_2D_MAX_RASTER_SCALE,
 		);
-		return `${frame.left} ${frame.top} ${frame.viewWidth} ${frame.viewHeight}`;
 	});
+	const editor2DSceneTransform = $(() => {
+		if (editor2DUseCssTransformPath.value) return undefined;
+		const frame = editor2DSceneFrame.value;
+		return `translate(${frame.left} ${frame.top}) scale(${frame.scale})`;
+	});
+	const editor2DSvgClass = $(() =>
+		editor2DUseCssTransformPath.value
+			? "absolute left-0 top-0 block max-w-none overflow-visible"
+			: "block h-full w-full",
+	);
+	const editor2DSvgStyle = $(() => {
+		if (!editor2DUseCssTransformPath.value) return "background: transparent;";
+		const frame = editor2DSceneFrame.value;
+		return `background: transparent; transform: translate3d(${frame.left}px, ${frame.top}px, 0) scale(${frame.scale / editor2DSvgRasterScale.value}); transform-origin: 0 0; will-change: transform;`;
+	});
+	const editor2DSvgViewBox = $(() =>
+		editor2DUseCssTransformPath.value
+			? editor2DSceneViewBox.value
+			: editor2DViewportViewBox.value,
+	);
+	const editor2DSvgPreserveAspectRatio = $(() =>
+		editor2DUseCssTransformPath.value ? undefined : "none",
+	);
+	const editor2DSvgWidth = $(() =>
+		editor2DUseCssTransformPath.value
+			? Math.max(1, Math.ceil(svgW.value * editor2DSvgRasterScale.value))
+			: undefined,
+	);
+	const editor2DSvgHeight = $(() =>
+		editor2DUseCssTransformPath.value
+			? Math.max(1, Math.ceil(svgH.value * editor2DSvgRasterScale.value))
+			: undefined,
+	);
 	const editor2DBackgroundStyle = $(() =>
 		resolvedTheme.value === "dark"
 			? "background: linear-gradient(180deg, #0f172a 0%, #020617 100%);"
@@ -1776,7 +1804,7 @@ export default function App() {
 	onDispose(() => editor2DResizeObserver?.disconnect());
 
 	watch(() => {
-		const frame = get2DEditorViewFrame(
+		const frame = get2DEditorSceneFrame(
 			editor2DZoom.value,
 			editor2DPanX.value,
 			editor2DPanY.value,
@@ -1878,17 +1906,10 @@ export default function App() {
 			editor2DIsDragging = true;
 			editor2DHasManualNavigation = true;
 			editor2DPressedAction = null;
-			const frame = get2DEditorViewFrame(
-				editor2DZoom.value,
-				editor2DDragStartPanX,
-				editor2DDragStartPanY,
-			);
 			set2DEditorView(
 				editor2DZoom.value,
-				editor2DDragStartPanX -
-					dx * (frame.viewWidth / Math.max(editor2DViewportWidth.value, 1)),
-				editor2DDragStartPanY -
-					dy * (frame.viewHeight / Math.max(editor2DViewportHeight.value, 1)),
+				editor2DDragStartPanX + dx,
+				editor2DDragStartPanY + dy,
 			);
 			return;
 		}
@@ -1905,17 +1926,10 @@ export default function App() {
 		editor2DIsDragging = true;
 		editor2DHasManualNavigation = true;
 		editor2DPressedAction = null;
-		const frame = get2DEditorViewFrame(
-			editor2DZoom.value,
-			editor2DDragStartPanX,
-			editor2DDragStartPanY,
-		);
 		set2DEditorView(
 			editor2DZoom.value,
-			editor2DDragStartPanX -
-				dx * (frame.viewWidth / Math.max(editor2DViewportWidth.value, 1)),
-			editor2DDragStartPanY -
-				dy * (frame.viewHeight / Math.max(editor2DViewportHeight.value, 1)),
+			editor2DDragStartPanX + dx,
+			editor2DDragStartPanY + dy,
 		);
 	};
 
@@ -1995,7 +2009,7 @@ export default function App() {
 	});
 	const appShellClass = $(() =>
 		[
-			"h-screen flex overflow-hidden font-sans bg-white text-gray-900 dark:bg-slate-950 dark:text-slate-100",
+			"h-screen [height:100dvh] flex overflow-hidden font-sans bg-white text-gray-900 dark:bg-slate-950 dark:text-slate-100",
 			isMobileLayout.value ? "flex-col" : "flex-row",
 		].join(" "),
 	);
@@ -2731,174 +2745,178 @@ export default function App() {
 									on:wheel={on2DEditorWheel}
 								>
 									<svg
-										attr:viewBox={editor2DViewBox}
-										attr:preserveAspectRatio="xMidYMid meet"
-										class="block h-full w-full"
-										style="background: transparent;"
+										attr:viewBox={editor2DSvgViewBox}
+										attr:preserveAspectRatio={editor2DSvgPreserveAspectRatio}
+										attr:width={editor2DSvgWidth}
+										attr:height={editor2DSvgHeight}
+										class={editor2DSvgClass}
+										style={editor2DSvgStyle}
 									>
-													<defs>
-														<clipPath
-															attr:id={editor2DBoardMaterialClipId}
-															attr:clipPathUnits="userSpaceOnUse"
-														>
-															<path attr:d={editor2DBoardMaterialPath} />
-														</clipPath>
-														<mask
-															attr:id={editor2DNodeMaskId}
-															attr:maskUnits="userSpaceOnUse"
-															attr:maskContentUnits="userSpaceOnUse"
-															attr:x="0"
-															attr:y="0"
-															attr:width={svgW}
-															attr:height={svgH}
-														>
-															<rect
-																attr:x="0"
-																attr:y="0"
-																attr:width={svgW}
-																attr:height={svgH}
-																attr:fill="white"
+										<defs>
+											<clipPath
+												attr:id={editor2DBoardMaterialClipId}
+												attr:clipPathUnits="userSpaceOnUse"
+											>
+												<path attr:d={editor2DBoardMaterialPath} />
+											</clipPath>
+											<mask
+												attr:id={editor2DNodeMaskId}
+												attr:maskUnits="userSpaceOnUse"
+												attr:maskContentUnits="userSpaceOnUse"
+												attr:x="0"
+												attr:y="0"
+												attr:width={svgW}
+												attr:height={svgH}
+											>
+												<rect
+													attr:x="0"
+													attr:y="0"
+													attr:width={svgW}
+													attr:height={svgH}
+													attr:fill="white"
+												/>
+
+												<For entries={nodes} track="id">
+													{({ item: { gx, gy } }) => {
+														const { x, y } = toNodeXY(gx, gy);
+														const kind = $(
+															() => topo.value.nodeKind[gy]?.[gx] ?? "none",
+														);
+														const dir = $(
+															() => topo.value.nodeDir[gy]?.[gx] ?? null,
+														);
+														const state = $(() =>
+															nodeState(
+																kind.value,
+																getMask(maskGrid.value, gx, gy),
+															),
+														);
+														return (
+															<NodeGlyph
+																kind={kind}
+																state={state}
+																x={x}
+																y={y}
+																dir={dir}
+																outerFill="none"
+																innerFill="black"
 															/>
+														);
+													}}
+												</For>
+											</mask>
+										</defs>
 
-															<For entries={nodes} track="id">
-																{({ item: { gx, gy } }) => {
-																	const { x, y } = toNodeXY(gx, gy);
-																	const kind = $(
-																		() => topo.value.nodeKind[gy]?.[gx] ?? "none",
-																	);
-																	const dir = $(
-																		() => topo.value.nodeDir[gy]?.[gx] ?? null,
-																	);
-																	const state = $(() =>
-																		nodeState(
-																			kind.value,
-																			getMask(maskGrid.value, gx, gy),
-																		),
-																	);
-																	return (
-																		<NodeGlyph
-																			kind={kind}
-																			state={state}
-																			x={x}
-																			y={y}
-																			dir={dir}
-																			outerFill="none"
-																			innerFill="black"
-																		/>
-																	);
-																}}
-															</For>
-														</mask>
-													</defs>
+										<g attr:transform={editor2DSceneTransform}>
+											<g attr:mask={`url(#${editor2DNodeMaskId})`}>
+												<If condition={$(() => !!editor2DBoardMaterialPath.value)}>
+													{() => (
+														<path
+															attr:d={editor2DBoardMaterialPath}
+															attr:fill={editor2DBoardFill}
+														/>
+													)}
+												</If>
+												<If condition={$(() => !!editor2DActiveTileInsetPath.value)}>
+													{() => (
+														<path
+															attr:d={editor2DActiveTileInsetPath}
+															attr:fill="#2563eb"
+														/>
+													)}
+												</If>
+												<If condition={$(() => !!editor2DNodeOverlayPath.value)}>
+													{() => (
+														<path
+															attr:d={editor2DNodeOverlayPath}
+															attr:fill={editor2DBoardFill}
+															attr:clip-path={`url(#${editor2DBoardMaterialClipId})`}
+														/>
+													)}
+												</If>
+											</g>
 
-													<g attr:mask={`url(#${editor2DNodeMaskId})`}>
-														<If condition={$(() => !!editor2DBoardMaterialPath.value)}>
-															{() => (
-																<path
-																	attr:d={editor2DBoardMaterialPath}
-																	attr:fill={editor2DBoardFill}
-																/>
-															)}
-														</If>
-														<If condition={$(() => !!editor2DActiveTileInsetPath.value)}>
-															{() => (
-																<path
-																	attr:d={editor2DActiveTileInsetPath}
-																	attr:fill="#2563eb"
-																/>
-															)}
-														</If>
-														<If condition={$(() => !!editor2DNodeOverlayPath.value)}>
-															{() => (
-																<path
-																	attr:d={editor2DNodeOverlayPath}
-																	attr:fill={editor2DBoardFill}
-																	attr:clip-path={`url(#${editor2DBoardMaterialClipId})`}
-																/>
-															)}
-														</If>
-													</g>
+											<For entries={tiles} track="id">
+												{({ item: { tx, ty, gx, gy } }) => (
+													<rect
+														attr:data-editor-action="tile"
+														attr:data-gx={gx}
+														attr:data-gy={gy}
+														attr:x={pad + tx * tileSize}
+														attr:y={pad + ty * tileSize}
+														attr:width={tileSize}
+														attr:height={tileSize}
+														attr:fill="transparent"
+													/>
+												)}
+											</For>
 
-													<For entries={tiles} track="id">
-														{({ item: { tx, ty, gx, gy } }) => (
-															<rect
-																attr:data-editor-action="tile"
-																attr:data-gx={gx}
-																attr:data-gy={gy}
-																attr:x={pad + tx * tileSize}
-																attr:y={pad + ty * tileSize}
-																attr:width={tileSize}
-																attr:height={tileSize}
-																attr:fill="transparent"
-															/>
-														)}
-													</For>
+											<For entries={nodes} track="id">
+												{({ item: { gx, gy } }) => {
+													const { x, y } = toNodeXY(gx, gy);
+													return (
+														<circle
+															attr:data-editor-action="node"
+															attr:data-gx={gx}
+															attr:data-gy={gy}
+															attr:cx={x}
+															attr:cy={y}
+															attr:r={20}
+															attr:fill="transparent"
+														/>
+													);
+												}}
+											</For>
 
-													<For entries={nodes} track="id">
-														{({ item: { gx, gy } }) => {
-															const { x, y } = toNodeXY(gx, gy);
-															return (
-																<circle
-																	attr:data-editor-action="node"
-																	attr:data-gx={gx}
-																	attr:data-gy={gy}
-																	attr:cx={x}
-																	attr:cy={y}
-																	attr:r={20}
-																	attr:fill="transparent"
-																/>
-															);
-														}}
-													</For>
-
-													<Editor2DResizeButton
-														cx={editor2DTopAddX}
-														cy={editor2DTopControlY}
-														label="+"
-														action="top-add"
-													/>
-													<Editor2DResizeButton
-														cx={editor2DTopRemoveX}
-														cy={editor2DTopControlY}
-														label="-"
-														action="top-remove"
-													/>
-													<Editor2DResizeButton
-														cx={editor2DLeftControlX}
-														cy={editor2DLeftAddY}
-														label="+"
-														action="left-add"
-													/>
-													<Editor2DResizeButton
-														cx={editor2DLeftControlX}
-														cy={editor2DLeftRemoveY}
-														label="-"
-														action="left-remove"
-													/>
-													<Editor2DResizeButton
-														cx={editor2DRightControlX}
-														cy={editor2DRightAddY}
-														label="+"
-														action="right-add"
-													/>
-													<Editor2DResizeButton
-														cx={editor2DRightControlX}
-														cy={editor2DRightRemoveY}
-														label="-"
-														action="right-remove"
-													/>
-													<Editor2DResizeButton
-														cx={editor2DBottomAddX}
-														cy={editor2DBottomControlY}
-														label="+"
-														action="bottom-add"
-													/>
-													<Editor2DResizeButton
-														cx={editor2DBottomRemoveX}
-														cy={editor2DBottomControlY}
-														label="-"
-														action="bottom-remove"
-													/>
+											<Editor2DResizeButton
+												cx={editor2DTopAddX}
+												cy={editor2DTopControlY}
+												label="+"
+												action="top-add"
+											/>
+											<Editor2DResizeButton
+												cx={editor2DTopRemoveX}
+												cy={editor2DTopControlY}
+												label="-"
+												action="top-remove"
+											/>
+											<Editor2DResizeButton
+												cx={editor2DLeftControlX}
+												cy={editor2DLeftAddY}
+												label="+"
+												action="left-add"
+											/>
+											<Editor2DResizeButton
+												cx={editor2DLeftControlX}
+												cy={editor2DLeftRemoveY}
+												label="-"
+												action="left-remove"
+											/>
+											<Editor2DResizeButton
+												cx={editor2DRightControlX}
+												cy={editor2DRightAddY}
+												label="+"
+												action="right-add"
+											/>
+											<Editor2DResizeButton
+												cx={editor2DRightControlX}
+												cy={editor2DRightRemoveY}
+												label="-"
+												action="right-remove"
+											/>
+											<Editor2DResizeButton
+												cx={editor2DBottomAddX}
+												cy={editor2DBottomControlY}
+												label="+"
+												action="bottom-add"
+											/>
+											<Editor2DResizeButton
+												cx={editor2DBottomRemoveX}
+												cy={editor2DBottomControlY}
+												label="-"
+												action="bottom-remove"
+											/>
+										</g>
 									</svg>
 								</div>
 							</div>
