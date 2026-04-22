@@ -249,9 +249,20 @@ export default function RealtimePreview({ mesh, loading, error, theme, mobileLay
 	}
 
 	function currentPixelRatio() {
+		const devicePixelRatio = window.devicePixelRatio || 1
 		const triangleCount = (meshSig.value?.indices?.length ?? 0) / 3
-		const cap = triangleCount > 25000 ? 1 : triangleCount > 12000 ? 1.25 : 1.5
-		return Math.min(window.devicePixelRatio || 1, cap)
+		const cap = mobileLayoutSig.value
+			? triangleCount > 25000
+				? 2
+				: triangleCount > 12000
+					? 2.5
+					: 3
+			: triangleCount > 25000
+				? 1
+				: triangleCount > 12000
+					? 1.25
+					: 1.5
+		return Math.min(devicePixelRatio, cap)
 	}
 
 	function updateCanvasSize() {
