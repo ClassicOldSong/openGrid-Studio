@@ -16,6 +16,7 @@ import {
 	createPreviewOptionClass,
 	createThemeOptionClass,
 } from "./ui-styles.js";
+import { DEFAULT_PART_ID, getPartDefinition } from "./parts/index.js";
 
 // --- Constants & Pure Utils ---
 
@@ -25,7 +26,8 @@ const BITS = {
 	CHAMFER: 4,
 };
 
-const STORAGE_KEY = "opengrid-mask-editor-config-v2";
+const STORAGE_KEY = "opengrid-studio-config-v3";
+const LEGACY_STORAGE_KEYS = ["opengrid-mask-editor-config-v2"];
 const EXPORT_FORMAT_OPTIONS = [
 	{
 		value: "stl-binary",
@@ -56,38 +58,7 @@ const EDITOR_2D_MAX_ZOOM = 5;
 const EDITOR_2D_DRAG_THRESHOLD = 6;
 const EDITOR_2D_RESIZE_BUTTON_OFFSET = 20;
 const EDITOR_2D_INITIAL_MAX_TILE_PX = 88;
-const DEFAULT_CONFIG = {
-	themeMode: "auto",
-	exportFormat: "stl-binary",
-	fullOrLite: "Full",
-	tileSizeValue: 28,
-	tileThicknessValue: 6.8,
-	liteTileThicknessValue: 4,
-	heavyTileThicknessValue: 13.8,
-	heavyTileGapValue: 0.2,
-	addAdhesiveBase: false,
-	adhesiveBaseThicknessValue: 0.6,
-	screwDiameterValue: 4.1,
-	screwHeadDiameterValue: 7.2,
-	screwHeadInsetValue: 1,
-	screwHeadIsCountersunk: true,
-	screwHeadCountersunkDegreeValue: 90,
-	backsideScrewHole: true,
-	backsideScrewHeadDiameterShrinkValue: 0,
-	backsideScrewHeadInsetValue: 1,
-	backsideScrewHeadIsCountersunk: true,
-	backsideScrewHeadCountersunkDegreeValue: 90,
-	stackCountValue: 1,
-	stackingMethod: "Interface Layer",
-	interfaceThicknessValue: 0.4,
-	interfaceSeparationValue: 0.1,
-	circleSegmentsValue: 64,
-	width: 4,
-	height: 4,
-	top1Text: "0",
-	top2Text: "0",
-	maskGrid: buildRectangleMask(4, 4),
-};
+const DEFAULT_CONFIG = createDefaultAppConfig(DEFAULT_PART_ID);
 
 function clamp(v, lo, hi) {
 	return Math.max(lo, Math.min(hi, v));
@@ -108,29 +79,6 @@ function getExportFormatMeta(format) {
 		EXPORT_FORMAT_OPTIONS.find((option) => option.value === format) ??
 		EXPORT_FORMAT_OPTIONS[0]
 	);
-}
-
-function shortHash(text) {
-	let hash = 2166136261;
-	for (let i = 0; i < text.length; i++) {
-		hash ^= text.charCodeAt(i);
-		hash = Math.imul(hash, 16777619);
-	}
-	return (hash >>> 0).toString(36).padStart(7, "0").slice(0, 7);
-}
-
-function buildExportFilename(config, format) {
-	const meta = getExportFormatMeta(format);
-	const boardWidth = Math.max(0, (config.exportGrid?.[0]?.length ?? 1) - 1);
-	const boardHeight = Math.max(0, (config.exportGrid?.length ?? 1) - 1);
-	const effectiveStackCount = config.addAdhesiveBase
-		? 1
-		: Math.max(1, Number(config.stackCountValue) || 1);
-	const boardType = String(config.fullOrLite || "board")
-		.trim()
-		.toLowerCase();
-	const hash = shortHash(JSON.stringify(config));
-	return `opengrid_${boardType}_${boardWidth}x${boardHeight}_stack${effectiveStackCount}_${hash}.${meta.extension}`;
 }
 
 function range(n) {
@@ -196,6 +144,21 @@ function buildRectangleMask(width, height) {
 		}
 	}
 	return enableOuterCornerChamfers(grid, width, height);
+}
+
+function createDefaultAppConfig(partId = DEFAULT_PART_ID) {
+	const resolvedPartId = getPartDefinition(partId).id;
+	return {
+		themeMode: "auto",
+		exportFormat: "stl-binary",
+		partId: resolvedPartId,
+		...getPartDefinition(resolvedPartId).createDefaultConfig(),
+		width: 4,
+		height: 4,
+		top1Text: "0",
+		top2Text: "0",
+		maskGrid: buildRectangleMask(4, 4),
+	};
 }
 
 function parseTopColumnInput(v) {
@@ -391,84 +354,6 @@ function sanitizeMask(grid, width, height) {
 	return out;
 }
 
-function toScad2DArray(grid) {
-	const rows = grid.map((row) => `  [${row.join(", ")}]`);
-	return `[\n${rows.join(",\n")}\n]`;
-}
-
-function toScadBool(v) {
-	return v ? "true" : "false";
-}
-
-function buildEntryScad(config) {
-	const {
-		exportGrid,
-		fullOrLite,
-		tileSizeValue,
-		tileThicknessValue,
-		liteTileThicknessValue,
-		heavyTileThicknessValue,
-		heavyTileGapValue,
-		addAdhesiveBase,
-		adhesiveBaseThicknessValue,
-		screwDiameterValue,
-		screwHeadDiameterValue,
-		screwHeadInsetValue,
-		screwHeadIsCountersunk,
-		screwHeadCountersunkDegreeValue,
-		backsideScrewHole,
-		backsideScrewHeadDiameterShrinkValue,
-		backsideScrewHeadInsetValue,
-		backsideScrewHeadIsCountersunk,
-		backsideScrewHeadCountersunkDegreeValue,
-		stackCountValue,
-		stackingMethod,
-		interfaceThicknessValue,
-		interfaceSeparationValue,
-		circleSegmentsValue,
-	} = config;
-
-	return `/*
-	Usage: Download 'opengrid_generator.scad' from https://github.com/ClassicOldSong/openGrid-Studio
-	and place in the same dir of this script.
-*/
-
-include <BOSL2/std.scad>
-use <opengrid_generator.scad>
-
-mask = ${toScad2DArray(exportGrid)};
-
-openGridFromMask(
-	mask_array = mask,
-	full_or_lite = \"${fullOrLite}\",
-	tile_size = ${tileSizeValue},
-	tile_thickness = ${tileThicknessValue},
-	lite_tile_thickness = ${liteTileThicknessValue},
-	heavy_tile_thickness = ${heavyTileThicknessValue},
-	heavy_tile_gap = ${heavyTileGapValue},
-	add_adhesive_base = ${toScadBool(addAdhesiveBase)},
-	adhesive_base_thickness = ${adhesiveBaseThicknessValue},
-	screw_diameter = ${screwDiameterValue},
-	screw_head_diameter = ${screwHeadDiameterValue},
-	screw_head_inset = ${screwHeadInsetValue},
-	screw_head_is_countersunk = ${toScadBool(screwHeadIsCountersunk)},
-	screw_head_countersunk_degree = ${screwHeadCountersunkDegreeValue},
-	backside_screw_hole = ${toScadBool(backsideScrewHole)},
-	backside_screw_head_diameter_shrink = ${backsideScrewHeadDiameterShrinkValue},
-	backside_screw_head_inset = ${backsideScrewHeadInsetValue},
-	backside_screw_head_is_countersunk = ${toScadBool(backsideScrewHeadIsCountersunk)},
-	backside_screw_head_countersunk_degree = ${backsideScrewHeadCountersunkDegreeValue},
-	stack_count = ${stackCountValue},
-	stacking_method = \"${stackingMethod}\",
-	interface_thickness = ${interfaceThicknessValue},
-	interface_separation = ${interfaceSeparationValue},
-	circle_segments = ${circleSegmentsValue},
-	anchor = BOT,
-	spin = 0,
-	orient = UP
-);`;
-}
-
 function nodeState(kind, raw) {
 	const hasHole = hasBit(raw, BITS.HOLE);
 	if (kind === "edge") {
@@ -542,6 +427,7 @@ function resizeMask(
 }
 
 export default function App() {
+	const activePartId = signal(DEFAULT_CONFIG.partId);
 	const themeMode = signal(DEFAULT_CONFIG.themeMode);
 	const previewMode = signal("2d");
 	const exportFormat = signal(DEFAULT_CONFIG.exportFormat);
@@ -621,8 +507,7 @@ export default function App() {
 	);
 	let workerRequestId = 0;
 	const pendingWorkerRequests = new Map();
-
-	exportWorker.postMessage({ type: "warmup" });
+	const currentPart = $(() => getPartDefinition(activePartId.value));
 
 	exportWorker.onmessage = ({ data }) => {
 		const pending = pendingWorkerRequests.get(data.id);
@@ -640,67 +525,64 @@ export default function App() {
 	};
 
 	const applyConfig = (config) => {
-		themeMode.value = config.themeMode ?? DEFAULT_CONFIG.themeMode;
-		exportFormat.value = config.exportFormat ?? DEFAULT_CONFIG.exportFormat;
-		fullOrLite.value = config.fullOrLite ?? DEFAULT_CONFIG.fullOrLite;
-		tileSizeValue.value = config.tileSizeValue ?? DEFAULT_CONFIG.tileSizeValue;
+		const defaults = createDefaultAppConfig(config.partId ?? activePartId.value);
+		activePartId.value = defaults.partId;
+		themeMode.value = config.themeMode ?? defaults.themeMode;
+		exportFormat.value = config.exportFormat ?? defaults.exportFormat;
+		fullOrLite.value = config.fullOrLite ?? defaults.fullOrLite;
+		tileSizeValue.value = config.tileSizeValue ?? defaults.tileSizeValue;
 		tileThicknessValue.value =
-			config.tileThicknessValue ?? DEFAULT_CONFIG.tileThicknessValue;
+			config.tileThicknessValue ?? defaults.tileThicknessValue;
 		liteTileThicknessValue.value =
-			config.liteTileThicknessValue ?? DEFAULT_CONFIG.liteTileThicknessValue;
+			config.liteTileThicknessValue ?? defaults.liteTileThicknessValue;
 		heavyTileThicknessValue.value =
-			config.heavyTileThicknessValue ?? DEFAULT_CONFIG.heavyTileThicknessValue;
+			config.heavyTileThicknessValue ?? defaults.heavyTileThicknessValue;
 		heavyTileGapValue.value =
-			config.heavyTileGapValue ?? DEFAULT_CONFIG.heavyTileGapValue;
-		addAdhesiveBase.value =
-			config.addAdhesiveBase ?? DEFAULT_CONFIG.addAdhesiveBase;
+			config.heavyTileGapValue ?? defaults.heavyTileGapValue;
+		addAdhesiveBase.value = config.addAdhesiveBase ?? defaults.addAdhesiveBase;
 		adhesiveBaseThicknessValue.value =
-			config.adhesiveBaseThicknessValue ??
-			DEFAULT_CONFIG.adhesiveBaseThicknessValue;
+			config.adhesiveBaseThicknessValue ?? defaults.adhesiveBaseThicknessValue;
 		screwDiameterValue.value =
-			config.screwDiameterValue ?? DEFAULT_CONFIG.screwDiameterValue;
+			config.screwDiameterValue ?? defaults.screwDiameterValue;
 		screwHeadDiameterValue.value =
-			config.screwHeadDiameterValue ?? DEFAULT_CONFIG.screwHeadDiameterValue;
+			config.screwHeadDiameterValue ?? defaults.screwHeadDiameterValue;
 		screwHeadInsetValue.value =
-			config.screwHeadInsetValue ?? DEFAULT_CONFIG.screwHeadInsetValue;
+			config.screwHeadInsetValue ?? defaults.screwHeadInsetValue;
 		screwHeadIsCountersunk.value =
-			config.screwHeadIsCountersunk ?? DEFAULT_CONFIG.screwHeadIsCountersunk;
+			config.screwHeadIsCountersunk ?? defaults.screwHeadIsCountersunk;
 		screwHeadCountersunkDegreeValue.value =
 			config.screwHeadCountersunkDegreeValue ??
-			DEFAULT_CONFIG.screwHeadCountersunkDegreeValue;
+			defaults.screwHeadCountersunkDegreeValue;
 		backsideScrewHole.value =
-			config.backsideScrewHole ?? DEFAULT_CONFIG.backsideScrewHole;
+			config.backsideScrewHole ?? defaults.backsideScrewHole;
 		backsideScrewHeadDiameterShrinkValue.value =
 			config.backsideScrewHeadDiameterShrinkValue ??
-			DEFAULT_CONFIG.backsideScrewHeadDiameterShrinkValue;
+			defaults.backsideScrewHeadDiameterShrinkValue;
 		backsideScrewHeadInsetValue.value =
-			config.backsideScrewHeadInsetValue ??
-			DEFAULT_CONFIG.backsideScrewHeadInsetValue;
+			config.backsideScrewHeadInsetValue ?? defaults.backsideScrewHeadInsetValue;
 		backsideScrewHeadIsCountersunk.value =
 			config.backsideScrewHeadIsCountersunk ??
-			DEFAULT_CONFIG.backsideScrewHeadIsCountersunk;
+			defaults.backsideScrewHeadIsCountersunk;
 		backsideScrewHeadCountersunkDegreeValue.value =
 			config.backsideScrewHeadCountersunkDegreeValue ??
-			DEFAULT_CONFIG.backsideScrewHeadCountersunkDegreeValue;
-		stackCountValue.value =
-			config.stackCountValue ?? DEFAULT_CONFIG.stackCountValue;
-		stackingMethod.value =
-			config.stackingMethod ?? DEFAULT_CONFIG.stackingMethod;
+			defaults.backsideScrewHeadCountersunkDegreeValue;
+		stackCountValue.value = config.stackCountValue ?? defaults.stackCountValue;
+		stackingMethod.value = config.stackingMethod ?? defaults.stackingMethod;
 		interfaceThicknessValue.value =
-			config.interfaceThicknessValue ?? DEFAULT_CONFIG.interfaceThicknessValue;
+			config.interfaceThicknessValue ?? defaults.interfaceThicknessValue;
 		interfaceSeparationValue.value =
-			config.interfaceSeparationValue ??
-			DEFAULT_CONFIG.interfaceSeparationValue;
+			config.interfaceSeparationValue ?? defaults.interfaceSeparationValue;
 		circleSegmentsValue.value =
-			config.circleSegmentsValue ?? DEFAULT_CONFIG.circleSegmentsValue;
-		width.value = config.width ?? DEFAULT_CONFIG.width;
-		height.value = config.height ?? DEFAULT_CONFIG.height;
-		top1Text.value = config.top1Text ?? DEFAULT_CONFIG.top1Text;
-		top2Text.value = config.top2Text ?? DEFAULT_CONFIG.top2Text;
-		maskGrid.value = cloneGrid(config.maskGrid ?? DEFAULT_CONFIG.maskGrid);
+			config.circleSegmentsValue ?? defaults.circleSegmentsValue;
+		width.value = config.width ?? defaults.width;
+		height.value = config.height ?? defaults.height;
+		top1Text.value = config.top1Text ?? defaults.top1Text;
+		top2Text.value = config.top2Text ?? defaults.top2Text;
+		maskGrid.value = cloneGrid(config.maskGrid ?? defaults.maskGrid);
 	};
 
 	const getConfigState = () => ({
+		partId: activePartId.value,
 		themeMode: themeMode.value,
 		exportFormat: exportFormat.value,
 		fullOrLite: fullOrLite.value,
@@ -735,6 +617,10 @@ export default function App() {
 		maskGrid: maskGrid.value,
 	});
 
+	watch(() => {
+		exportWorker.postMessage({ type: "warmup", partId: activePartId.value });
+	});
+
 	const themeMedia = window.matchMedia("(prefers-color-scheme: dark)");
 	systemPrefersDark.value = themeMedia.matches;
 	const onThemeChange = (event) => {
@@ -758,21 +644,26 @@ export default function App() {
 
 	// Load from local storage
 	try {
-		const raw = localStorage.getItem(STORAGE_KEY);
+		const raw =
+			localStorage.getItem(STORAGE_KEY) ??
+			LEGACY_STORAGE_KEYS
+				.map((key) => localStorage.getItem(key))
+				.find(Boolean);
 		if (raw) {
 			const saved = JSON.parse(raw);
 			if (saved) {
+				const defaults = createDefaultAppConfig(saved.partId ?? DEFAULT_PART_ID);
 				nextTick(() => {
 					applyConfig({
-						...DEFAULT_CONFIG,
+						...defaults,
 						...saved,
 						themeMode:
 							saved.themeMode ??
 							(saved.theme === "light" || saved.theme === "dark"
 								? saved.theme
-								: DEFAULT_CONFIG.themeMode),
+								: defaults.themeMode),
 					});
-				})
+				});
 			}
 		}
 	} catch (e) {}
@@ -802,6 +693,7 @@ export default function App() {
 		sanitizeMask(maskGrid.value, width.value, height.value),
 	);
 	const exportConfig = $(() => ({
+		partId: activePartId.value,
 		exportGrid: exportGrid.value,
 		fullOrLite: fullOrLite.value,
 		tileSizeValue: tileSizeValue.value,
@@ -830,7 +722,10 @@ export default function App() {
 		circleSegmentsValue: circleSegmentsValue.value,
 	}));
 	const previewConfigJson = $(() => JSON.stringify(exportConfig.value));
-	const exportText = $(() => buildEntryScad(exportConfig.value));
+	const exportText = $(() => {
+		const part = currentPart.value;
+		return part.buildExportText ? part.buildExportText(exportConfig.value) : "";
+	});
 
 	const updateSize = (nextW, nextH, offsetX = 0, offsetY = 0) => {
 		const nw = Math.max(BOARD_DIMENSION_MIN, nextW);
@@ -976,10 +871,10 @@ export default function App() {
 			exportWorker.postMessage({ id, type, ...payload });
 		});
 
-	const renderExport = (config, format) =>
-		requestWorker("render-export", { config, format });
-	const renderPreviewMesh = (config) =>
-		requestWorker("preview-mesh", { config });
+	const renderExport = (partId, config, format) =>
+		requestWorker("render-export", { partId, config, format });
+	const renderPreviewMesh = (partId, config) =>
+		requestWorker("preview-mesh", { partId, config });
 
 	const downloadExport = async () => {
 		if (exportInFlight.value) return;
@@ -988,10 +883,18 @@ export default function App() {
 		let objectUrl = null;
 
 		try {
+			const part = currentPart.value;
 			const config = exportConfig.value;
 			const format = exportFormat.value;
-			const filename = buildExportFilename(config, format);
-			const { bytes, mimeType, logs } = await renderExport(config, format);
+			const formatMeta = getExportFormatMeta(format);
+			const filename = part.buildExportFilename
+				? part.buildExportFilename(config, formatMeta)
+				: `${part.metadata.slug || part.metadata.id}.${formatMeta.extension}`;
+			const { bytes, mimeType, logs } = await renderExport(
+				part.id,
+				config,
+				format,
+			);
 			const blob = new Blob([new Uint8Array(bytes)], { type: mimeType });
 			objectUrl = URL.createObjectURL(blob);
 			const element = document.createElement("a");
@@ -1037,7 +940,8 @@ export default function App() {
 	const clearConfiguration = () => {
 		persistConfig = false;
 		localStorage.removeItem(STORAGE_KEY);
-		applyConfig(DEFAULT_CONFIG);
+		for (const legacyKey of LEGACY_STORAGE_KEYS) localStorage.removeItem(legacyKey);
+		applyConfig(createDefaultAppConfig(activePartId.value));
 		queueMicrotask(() => {
 			persistConfig = true;
 		});
@@ -1429,7 +1333,7 @@ export default function App() {
 		if (clearMesh) previewMesh.value = null;
 	};
 
-	const queuePreviewRender = (config) => {
+	const queuePreviewRender = (partId, config) => {
 		if (previewTimer) clearTimeout(previewTimer);
 		previewTimer = setTimeout(async () => {
 			const sequence = ++previewSequence;
@@ -1437,7 +1341,7 @@ export default function App() {
 			previewError.value = "";
 
 			try {
-				const { mesh } = await renderPreviewMesh(config);
+				const { mesh } = await renderPreviewMesh(partId, config);
 				if (sequence !== previewSequence) return;
 				previewMesh.value = mesh;
 				previewLoading.value = false;
@@ -1451,12 +1355,13 @@ export default function App() {
 	};
 
 	watch(() => {
+		const partId = activePartId.value;
 		const previewConfig = JSON.parse(previewConfigJson.value);
 		if (previewMode.value !== "3d") {
 			cancelPreviewRender(false);
 			return;
 		}
-		queuePreviewRender(previewConfig);
+		queuePreviewRender(partId, previewConfig);
 	});
 
 	onDispose(() => {
@@ -1706,6 +1611,9 @@ export default function App() {
 		previewOptionClass,
 		previewMode,
 	};
+	const editor2DComponentKey = $(
+		() => currentPart.value.editors?.preview2D?.Component ? currentPart.value.id : "",
+	);
 	const configPanelProps = {
 		themeControls,
 		classes: {
@@ -1761,6 +1669,57 @@ export default function App() {
 			clearConfiguration,
 		},
 	};
+	const openGridBoardEditor2DProps = {
+		editor2DBackgroundStyle,
+		editor2DViewportClass,
+		editor2DViewportStyle,
+		attach2DEditorViewport,
+		on2DEditorPointerDown,
+		on2DEditorPointerMove,
+		on2DEditorPointerFinish,
+		on2DEditorWheel,
+		editor2DSvgViewBox,
+		editor2DSvgPreserveAspectRatio,
+		editor2DSvgWidth,
+		editor2DSvgHeight,
+		editor2DSvgClass,
+		editor2DSvgStyle,
+		editor2DBoardMaterialClipId,
+		editor2DNodeMaskId,
+		editor2DBoardMaterialPath,
+		editor2DActiveTileInsetPath,
+		editor2DNodeOverlayPath,
+		editor2DBoardFill,
+		editor2DSceneTransform,
+		tiles,
+		nodes,
+		toNodeXY,
+		topo,
+		maskGrid,
+		getMask,
+		nodeState,
+		svgW,
+		svgH,
+		pad,
+		tileSize,
+		editor2DResizeButtonFill,
+		editor2DResizeButtonStroke,
+		editor2DResizeButtonText,
+		editor2DTopAddX,
+		editor2DTopRemoveX,
+		editor2DLeftControlX,
+		editor2DLeftAddY,
+		editor2DLeftRemoveY,
+		editor2DRightControlX,
+		editor2DRightAddY,
+		editor2DRightRemoveY,
+		editor2DBottomAddX,
+		editor2DBottomRemoveX,
+		editor2DTopControlY,
+		editor2DBottomControlY,
+		editor2DShowHint,
+		editor2DHintClass,
+	};
 	const previewPaneProps = {
 		showAboutModal,
 		openConfigPanel,
@@ -1772,57 +1731,10 @@ export default function App() {
 		previewLoading,
 		previewError,
 		resolvedTheme,
-		editor2D: {
-			editor2DBackgroundStyle,
-			editor2DViewportClass,
-			editor2DViewportStyle,
-			attach2DEditorViewport,
-			on2DEditorPointerDown,
-			on2DEditorPointerMove,
-			on2DEditorPointerFinish,
-			on2DEditorWheel,
-			editor2DSvgViewBox,
-			editor2DSvgPreserveAspectRatio,
-			editor2DSvgWidth,
-			editor2DSvgHeight,
-			editor2DSvgClass,
-			editor2DSvgStyle,
-			editor2DBoardMaterialClipId,
-			editor2DNodeMaskId,
-			editor2DBoardMaterialPath,
-			editor2DActiveTileInsetPath,
-			editor2DNodeOverlayPath,
-			editor2DBoardFill,
-			editor2DSceneTransform,
-			tiles,
-			nodes,
-			toNodeXY,
-			topo,
-			maskGrid,
-			getMask,
-			nodeState,
-			svgW,
-			svgH,
-			pad,
-			tileSize,
-			editor2DResizeButtonFill,
-			editor2DResizeButtonStroke,
-			editor2DResizeButtonText,
-			editor2DTopAddX,
-			editor2DTopRemoveX,
-			editor2DLeftControlX,
-			editor2DLeftAddY,
-			editor2DLeftRemoveY,
-			editor2DRightControlX,
-			editor2DRightAddY,
-			editor2DRightRemoveY,
-			editor2DBottomAddX,
-			editor2DBottomRemoveX,
-			editor2DTopControlY,
-			editor2DBottomControlY,
-			editor2DShowHint,
-			editor2DHintClass,
-		},
+		editor2DComponentKey,
+		resolveEditor2DComponent: () =>
+			currentPart.value.editors?.preview2D?.Component ?? null,
+		editor2DProps: openGridBoardEditor2DProps,
 	};
 	const copyModalProps = {
 		showModal,

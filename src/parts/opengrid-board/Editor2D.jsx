@@ -42,7 +42,7 @@ const Editor2DResizeButton = ({ cx, cy, label, action, editor }) => {
 	);
 };
 
-export default function Editor2D({ editor }) {
+export default function OpenGridBoardEditor2D({ editor }) {
 	return (
 		<div class="flex-1 min-h-0 relative overflow-hidden bg-white dark:bg-slate-950">
 			<div class="absolute inset-0" style={editor.editor2DBackgroundStyle}></div>

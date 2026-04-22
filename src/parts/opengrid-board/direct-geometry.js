@@ -1,7 +1,14 @@
-import ManifoldModule from "manifold-3d/manifold";
 import { manifoldToGLTFDoc } from "manifold-3d/lib/scene-builder";
 import { toArrayBuffer as export3mfToArrayBuffer } from "manifold-3d/lib/export-3mf";
-import { buildPlacementData } from "./placement-data.js";
+import { buildPlacementData } from "../../placement-data.js";
+import {
+	buildConnectorCut,
+	getConnectorCutZ,
+} from "../shared/geometry/connector-cutout.js";
+import {
+	getManifoldApi,
+	warmManifoldRuntime,
+} from "../shared/geometry/manifold-runtime.js";
 
 const OUTSIDE_EXTRUSION = 0.8;
 const INSIDE_GRID_TOP_CHAMFER = 0.4;
@@ -10,16 +17,8 @@ const TOP_CAPTURE_INITIAL_INSET = 2.4;
 const CORNER_SQUARE_THICKNESS = 2.6;
 const INTERSECTION_DISTANCE = 4.2;
 const TILE_INNER_SIZE_DIFFERENCE = 3;
-const CONNECTOR_CUTOUT_RADIUS = 2.6;
-const CONNECTOR_CUTOUT_SEPARATION = 2.5;
-const CONNECTOR_CUTOUT_HEIGHT = 2.4;
-const CONNECTOR_STEM_ROUNDING = 0.25;
-const CONNECTOR_SHOULDER_FILLET_RADIUS = 0.5;
-const CONNECTOR_INNER_BLEND_RADIUS = Math.sqrt(125 / 16);
-const LITE_CUTOUT_DISTANCE_FROM_TOP = 1;
 const HEAVY_JOIN_SLICE_EPSILON = 0.01;
 
-let manifoldPromise = null;
 const shapeCache = new Map();
 
 function cacheKey(name, parts) {
@@ -31,18 +30,8 @@ function getCachedShape(key, factory) {
 	return shapeCache.get(key);
 }
 
-async function getManifoldApi() {
-	if (!manifoldPromise) {
-		manifoldPromise = ManifoldModule().then((module) => {
-			module.setup();
-			return module;
-		});
-	}
-	return await manifoldPromise;
-}
-
-export async function warmDirectGeometry() {
-	await getManifoldApi();
+export async function warmOpenGridBoardGeometry() {
+	await warmManifoldRuntime();
 }
 
 function emptyManifold(Manifold) {
@@ -73,38 +62,6 @@ function countersinkHeight(enabled, degree, headDiameter, screwDiameter) {
 	const radiusDelta = headDiameter / 2 - screwDiameter / 2;
 	if (radiusDelta <= 0) return 0.01;
 	return Math.tan(((180 - degree) * Math.PI) / 360) * radiusDelta - 0.01;
-}
-
-function circleIntersections(centerA, radiusA, centerB, radiusB) {
-	const dx = centerB[0] - centerA[0];
-	const dy = centerB[1] - centerA[1];
-	const distance = Math.hypot(dx, dy);
-	const along =
-		(radiusA ** 2 - radiusB ** 2 + distance ** 2) / (2 * distance);
-	const height = Math.sqrt(Math.max(0, radiusA ** 2 - along ** 2));
-	const midX = centerA[0] + (along * dx) / distance;
-	const midY = centerA[1] + (along * dy) / distance;
-	return [
-		[midX + (-dy * height) / distance, midY + (dx * height) / distance],
-		[midX - (-dy * height) / distance, midY - (dx * height) / distance],
-	];
-}
-
-function angleOfPoint(center, point) {
-	return Math.atan2(point[1] - center[1], point[0] - center[0]);
-}
-
-function sampleArc(center, radius, startAngle, endAngle, steps) {
-	const points = [];
-	for (let i = 1; i <= steps; i++) {
-		const t = i / steps;
-		const angle = startAngle + (endAngle - startAngle) * t;
-		points.push([
-			center[0] + radius * Math.cos(angle),
-			center[1] + radius * Math.sin(angle),
-		]);
-	}
-	return points;
 }
 
 function boardProfile(baseThickness, boardType, tileSize) {
@@ -344,121 +301,6 @@ function buildHoleCut(Manifold, config, baseThickness, boardType) {
 	});
 }
 
-function buildConnectorCut(Manifold, CrossSection, circleSegments) {
-	const key = cacheKey("connector-cut", [circleSegments]);
-	return getCachedShape(key, () => {
-		const outerCenter = [CONNECTOR_CUTOUT_SEPARATION, 0];
-		const innerBlendCenterUpper = [
-			0,
-			CONNECTOR_CUTOUT_RADIUS + CONNECTOR_CUTOUT_SEPARATION,
-		];
-		const innerBlendCenterLower = [
-			0,
-			-(CONNECTOR_CUTOUT_RADIUS + CONNECTOR_CUTOUT_SEPARATION),
-		];
-		const shoulderInset = Math.sqrt(
-			(CONNECTOR_INNER_BLEND_RADIUS + CONNECTOR_SHOULDER_FILLET_RADIUS) ** 2 -
-				(
-					CONNECTOR_CUTOUT_SEPARATION + CONNECTOR_SHOULDER_FILLET_RADIUS
-				) ** 2,
-		);
-		const shoulderCenterUpper = [
-			shoulderInset,
-			CONNECTOR_CUTOUT_RADIUS - CONNECTOR_SHOULDER_FILLET_RADIUS,
-		];
-		const shoulderCenterLower = [
-			shoulderInset,
-			-(CONNECTOR_CUTOUT_RADIUS - CONNECTOR_SHOULDER_FILLET_RADIUS),
-		];
-		const sideHalfWidth =
-			CONNECTOR_CUTOUT_RADIUS + CONNECTOR_CUTOUT_SEPARATION -
-			Math.sqrt(
-				(CONNECTOR_INNER_BLEND_RADIUS - CONNECTOR_STEM_ROUNDING) ** 2 -
-					CONNECTOR_STEM_ROUNDING ** 2,
-			);
-		const sideNoseCenterUpper = [CONNECTOR_STEM_ROUNDING, sideHalfWidth];
-		const sideNoseCenterLower = [CONNECTOR_STEM_ROUNDING, -sideHalfWidth];
-
-		const upperNoseJoin = circleIntersections(
-			sideNoseCenterUpper,
-			CONNECTOR_STEM_ROUNDING,
-			innerBlendCenterUpper,
-			CONNECTOR_INNER_BLEND_RADIUS,
-		).sort((a, b) => b[1] - a[1])[0];
-		const upperShoulderJoin = circleIntersections(
-			innerBlendCenterUpper,
-			CONNECTOR_INNER_BLEND_RADIUS,
-			shoulderCenterUpper,
-			CONNECTOR_SHOULDER_FILLET_RADIUS,
-		).sort((a, b) => b[1] - a[1])[0];
-		const lowerShoulderJoin = [upperShoulderJoin[0], -upperShoulderJoin[1]];
-		const lowerNoseJoin = [upperNoseJoin[0], -upperNoseJoin[1]];
-
-		const noseSteps = Math.max(6, Math.ceil(circleSegments / 8));
-		const blendSteps = Math.max(10, Math.ceil(circleSegments / 6));
-		const outerSteps = Math.max(16, Math.ceil(circleSegments / 2));
-
-		const upperNoseEndAngle = angleOfPoint(sideNoseCenterUpper, upperNoseJoin);
-		const points = [
-			[0, sideHalfWidth],
-			...sampleArc(
-				sideNoseCenterUpper,
-				CONNECTOR_STEM_ROUNDING,
-				Math.PI,
-				upperNoseEndAngle < 0 ? upperNoseEndAngle + Math.PI * 2 : upperNoseEndAngle,
-				noseSteps,
-			),
-			...sampleArc(
-				innerBlendCenterUpper,
-				CONNECTOR_INNER_BLEND_RADIUS,
-				angleOfPoint(innerBlendCenterUpper, upperNoseJoin),
-				angleOfPoint(innerBlendCenterUpper, upperShoulderJoin),
-				blendSteps,
-			),
-			...sampleArc(
-				shoulderCenterUpper,
-				CONNECTOR_SHOULDER_FILLET_RADIUS,
-				angleOfPoint(shoulderCenterUpper, upperShoulderJoin),
-				Math.PI / 2,
-				noseSteps,
-			),
-			[CONNECTOR_CUTOUT_SEPARATION, CONNECTOR_CUTOUT_RADIUS],
-			...sampleArc(
-				outerCenter,
-				CONNECTOR_CUTOUT_RADIUS,
-				Math.PI / 2,
-				-Math.PI / 2,
-				outerSteps,
-			),
-			[shoulderInset, -CONNECTOR_CUTOUT_RADIUS],
-			...sampleArc(
-				shoulderCenterLower,
-				CONNECTOR_SHOULDER_FILLET_RADIUS,
-				-Math.PI / 2,
-				angleOfPoint(shoulderCenterLower, lowerShoulderJoin),
-				noseSteps,
-			),
-			...sampleArc(
-				innerBlendCenterLower,
-				CONNECTOR_INNER_BLEND_RADIUS,
-				angleOfPoint(innerBlendCenterLower, lowerShoulderJoin),
-				angleOfPoint(innerBlendCenterLower, lowerNoseJoin),
-				blendSteps,
-			),
-			...sampleArc(
-				sideNoseCenterLower,
-				CONNECTOR_STEM_ROUNDING,
-				angleOfPoint(sideNoseCenterLower, lowerNoseJoin),
-				Math.PI,
-				noseSteps,
-			),
-		];
-		const profile = new CrossSection([[...points].reverse()]);
-
-		return profile.extrude(CONNECTOR_CUTOUT_HEIGHT, 0, 0, [1, 1], true);
-	});
-}
-
 function buildBoardCuts(
 	Manifold,
 	CrossSection,
@@ -485,17 +327,8 @@ function buildBoardCuts(
 	}
 
 	if (includeConnectors && placements.connectorNodes.length > 0) {
-		const connectorCut = buildConnectorCut(
-			Manifold,
-			CrossSection,
-			config.circleSegmentsValue,
-		);
-		const connectorZ =
-			boardType === "Lite"
-				? baseThickness -
-					CONNECTOR_CUTOUT_HEIGHT / 2 -
-					LITE_CUTOUT_DISTANCE_FROM_TOP
-				: baseThickness / 2;
+		const connectorCut = buildConnectorCut(Manifold, CrossSection, config.circleSegmentsValue);
+		const connectorZ = getConnectorCutZ(boardType, baseThickness);
 
 		for (const [x, y, rotation] of placements.connectorNodes) {
 			cutParts.push(
@@ -915,15 +748,18 @@ async function buildDirectModel(config) {
 	return model;
 }
 
-export async function renderDirectPreviewMesh(config) {
+export async function renderOpenGridBoardPreviewMesh(config) {
 	const model = await buildDirectModel(config);
 	return {
 		mesh: buildPreviewMesh(model),
-		logs: [`Direct preview: Manifold (${config.fullOrLite})`],
+		logs: [`openGrid board preview: Manifold (${config.fullOrLite})`],
 	};
 }
 
-export async function renderDirectExport(config, format = "stl-binary") {
+export async function renderOpenGridBoardExport(
+	config,
+	format = "stl-binary",
+) {
 	const model = await buildDirectModel(config);
 
 	if (format === "3mf") {
@@ -933,7 +769,7 @@ export async function renderDirectExport(config, format = "stl-binary") {
 			bytes: new Uint8Array(buffer),
 			mimeType: "model/3mf",
 			extension: "3mf",
-			logs: [`Direct export: 3MF (${config.fullOrLite})`],
+			logs: [`openGrid board export: 3MF (${config.fullOrLite})`],
 		};
 	}
 
@@ -942,7 +778,7 @@ export async function renderDirectExport(config, format = "stl-binary") {
 			bytes: buildAsciiStl(model),
 			mimeType: "model/stl",
 			extension: "stl",
-			logs: [`Direct export: ASCII STL (${config.fullOrLite})`],
+			logs: [`openGrid board export: ASCII STL (${config.fullOrLite})`],
 		};
 	}
 
@@ -950,6 +786,6 @@ export async function renderDirectExport(config, format = "stl-binary") {
 		bytes: buildBinaryStl(model),
 		mimeType: "model/stl",
 		extension: "stl",
-		logs: [`Direct export: Binary STL (${config.fullOrLite})`],
+		logs: [`openGrid board export: Binary STL (${config.fullOrLite})`],
 	};
 }

@@ -1,6 +1,5 @@
 import { If } from "refui";
 import Preview3D from "./Preview3D.jsx";
-import Editor2D from "./Editor2D.jsx";
 import { DownloadActions, PreviewModeSwitcher, ThemeSwitcher } from "./AppControls.jsx";
 import { ABOUT_BUTTON_CLASS } from "../ui-styles.js";
 
@@ -16,7 +15,9 @@ export default function PreviewPane({ pane, controls }) {
 		previewLoading,
 		previewError,
 		resolvedTheme,
-		editor2D,
+		editor2DComponentKey,
+		resolveEditor2DComponent,
+		editor2DProps,
 	} = pane;
 
 	return (
@@ -82,7 +83,16 @@ export default function PreviewPane({ pane, controls }) {
 			</If>
 
 			<If condition={previewMode.eq("2d")}>
-				{() => <Editor2D editor={editor2D} />}
+				{() => (
+					<If condition={editor2DComponentKey}>
+						{() => {
+							const Editor2DComponent = resolveEditor2DComponent();
+							return Editor2DComponent ? (
+								<Editor2DComponent editor={editor2DProps} />
+							) : null;
+						}}
+					</If>
+				)}
 			</If>
 			<If condition={previewMode.eq("3d")}>
 				{() => (
