@@ -176,6 +176,9 @@ const DEFAULT_YAW = 146
 const DEFAULT_PITCH = 34
 const MIN_ZOOM = 0.35
 const MAX_ZOOM = 4.5
+const MAX_AUTO_FIT_ZOOM = 1.8
+const AUTO_FIT_REFERENCE_RADIUS = 80
+const MIN_AUTO_FIT_SCALE = 0.5
 const AUTO_FIT_PADDING = 1.12
 
 function defaultRotation() {
@@ -185,11 +188,12 @@ function defaultRotation() {
 	return quatNormalize(quatMultiply(roll, quatMultiply(pitch, yaw)))
 }
 
-export default function RealtimePreview({ mesh, loading, error, theme }) {
+export default function RealtimePreview({ mesh, loading, error, theme, mobileLayout }) {
 	const meshSig = $(() => read(mesh))
 	const loadingSig = $(() => read(loading))
 	const errorSig = $(() => read(error))
 	const themeSig = $(() => read(theme))
+	const mobileLayoutSig = $(() => read(mobileLayout))
 	const rendererError = signal('')
 	const showHint = signal(true)
 
@@ -408,7 +412,13 @@ export default function RealtimePreview({ mesh, loading, error, theme }) {
 		}
 
 		const requiredHalfHeight = Math.max(maxY, maxX / Math.max(aspect, 0.0001), 0.0001) * AUTO_FIT_PADDING
-		zoom = clamp((sceneRadius * 1.08) / requiredHalfHeight, MIN_ZOOM, MAX_ZOOM)
+		const fitZoom = (sceneRadius * 1.08) / requiredHalfHeight
+		const sizeAwareScale = clamp(
+			Math.sqrt(sceneRadius / AUTO_FIT_REFERENCE_RADIUS),
+			MIN_AUTO_FIT_SCALE,
+			1
+		)
+		zoom = clamp(fitZoom * sizeAwareScale, MIN_ZOOM, MAX_AUTO_FIT_ZOOM)
 		pendingAutoFit = false
 		hasAutoFit = true
 		requestDraw()
@@ -638,11 +648,12 @@ export default function RealtimePreview({ mesh, loading, error, theme }) {
 			: 'rounded-xl border border-slate-200 bg-white/90 px-3 h-9 text-xs font-bold text-slate-600 backdrop-blur hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-200 dark:hover:border-slate-600'
 	)
 
-	const hintClass = $(() =>
-		showHint.value && meshSig.value
-			? 'absolute right-4 bottom-4 rounded-xl bg-white/85 border border-slate-200 px-3 py-2 text-[11px] font-medium text-slate-500 backdrop-blur dark:bg-slate-950/70 dark:border-slate-700 dark:text-slate-400'
-			: 'hidden'
-	)
+	const hintClass = $(() => {
+		if (!showHint.value || !meshSig.value) return 'hidden'
+		return mobileLayoutSig.value
+			? 'absolute left-1/2 bottom-20 w-[min(calc(100%-2rem),320px)] -translate-x-1/2 rounded-xl bg-white/85 border border-slate-200 px-3 py-2 text-center text-[11px] font-medium text-slate-500 backdrop-blur dark:bg-slate-950/70 dark:border-slate-700 dark:text-slate-400'
+			: 'absolute right-4 bottom-4 rounded-xl bg-white/85 border border-slate-200 px-3 py-2 text-[11px] font-medium text-slate-500 backdrop-blur dark:bg-slate-950/70 dark:border-slate-700 dark:text-slate-400'
+	})
 
 	const backgroundStyle = $(() =>
 		themeSig.value === 'dark'

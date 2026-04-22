@@ -35,6 +35,12 @@ const SEGMENTS_MIN = 3;
 const COUNTERSINK_DEGREE_MIN = 1;
 const MOBILE_LAYOUT_BREAKPOINT = 1200;
 const MOBILE_LAYOUT_MEDIA_QUERY = `(max-width: ${MOBILE_LAYOUT_BREAKPOINT - 1}px)`;
+const EDITOR_2D_MIN_ZOOM = 0.35;
+const EDITOR_2D_MAX_ZOOM = 5;
+const EDITOR_2D_DRAG_THRESHOLD = 6;
+const EDITOR_2D_RESIZE_BUTTON_RADIUS = 12;
+const EDITOR_2D_RESIZE_BUTTON_OFFSET = 20;
+const EDITOR_2D_INITIAL_MAX_TILE_PX = 88;
 const DEFAULT_CONFIG = {
 	themeMode: "auto",
 	exportFormat: "stl-binary",
@@ -1050,6 +1056,88 @@ export default function App() {
 		maskGrid.value = next;
 	};
 
+	const perform2DEditorAction = (action) => {
+		if (!action?.type) return;
+		switch (action.type) {
+			case "tile":
+				toggleTile(action.gx, action.gy);
+				return;
+			case "node":
+				cycleNode(action.gx, action.gy);
+				return;
+			case "top-add":
+				updateSize(width.value, height.value + 1, 0, 1);
+				return;
+			case "top-remove":
+				updateSize(width.value, height.value - 1, 0, -1);
+				return;
+			case "left-add":
+				updateSize(width.value + 1, height.value, 1, 0);
+				return;
+			case "left-remove":
+				updateSize(width.value - 1, height.value, -1, 0);
+				return;
+			case "right-add":
+				updateSize(width.value + 1, height.value);
+				return;
+			case "right-remove":
+				updateSize(width.value - 1, height.value);
+				return;
+			case "bottom-add":
+				updateSize(width.value, height.value + 1);
+				return;
+			case "bottom-remove":
+				updateSize(width.value, height.value - 1);
+				return;
+			default:
+				return;
+		}
+	};
+
+	const read2DEditorAction = (target) => {
+		const actionEl = target?.closest?.("[data-editor-action]");
+		if (!actionEl) return null;
+
+		const type = actionEl.getAttribute("data-editor-action");
+		if (!type) return null;
+		if (type === "tile" || type === "node") {
+			return {
+				type,
+				gx: Number(actionEl.getAttribute("data-gx")),
+				gy: Number(actionEl.getAttribute("data-gy")),
+			};
+		}
+		return { type };
+	};
+
+	const Editor2DResizeButton = ({ cx, cy, label, action }) => (
+		<g
+			attr:data-editor-action={action}
+			style="cursor: pointer;"
+		>
+			<circle
+				attr:cx={cx}
+				attr:cy={cy}
+				attr:r={EDITOR_2D_RESIZE_BUTTON_RADIUS}
+				attr:fill={editor2DResizeButtonFill}
+				attr:stroke={editor2DResizeButtonStroke}
+				attr:stroke-width="1.5"
+			/>
+			<text
+				attr:x={cx}
+				attr:y={cy}
+				attr:fill={editor2DResizeButtonText}
+				attr:text-anchor="middle"
+				attr:dominant-baseline="central"
+				attr:font-size="15"
+				attr:font-weight="700"
+				style="pointer-events: none; user-select: none;"
+			>
+				{label}
+			</text>
+		</g>
+	);
+
 	const copy = async () => {
 		try {
 			await navigator.clipboard.writeText(exportText.value);
@@ -1135,11 +1223,262 @@ export default function App() {
 	const step = tileSize / 2;
 	const pad = 32;
 	const half = tileSize / 2;
+	const editor2DZoom = signal(1);
+	const editor2DPanX = signal(0);
+	const editor2DPanY = signal(0);
+	const editor2DViewportWidth = signal(1);
+	const editor2DViewportHeight = signal(1);
+
+	let editor2DViewportEl = null;
+	let editor2DResizeObserver = null;
+	let editor2DPointerId = null;
+	let editor2DDragStartX = 0;
+	let editor2DDragStartY = 0;
+	let editor2DDragStartPanX = 0;
+	let editor2DDragStartPanY = 0;
+	let editor2DGestureStartZoom = 1;
+	let editor2DGestureStartPanX = 0;
+	let editor2DGestureStartPanY = 0;
+	let editor2DGestureStartDistance = 1;
+	let editor2DGestureStartCenterX = 0;
+	let editor2DGestureStartCenterY = 0;
+	const editor2DActiveTouches = new Map();
+	let editor2DPressedAction = null;
+	let editor2DIsDragging = false;
+	let editor2DGestureActive = false;
+	let editor2DHasManualNavigation = false;
 
 	const svgW = $(() => width.value * tileSize + pad * 2);
 	const svgH = $(() => height.value * tileSize + pad * 2);
 	const boardW = $(() => width.value * tileSize);
 	const boardH = $(() => height.value * tileSize);
+	const get2DEditorViewMetrics = (zoom = editor2DZoom.value) => {
+		const contentWidth = svgW.value;
+		const contentHeight = svgH.value;
+		const viewportWidth = Math.max(editor2DViewportWidth.value, 1);
+		const viewportHeight = Math.max(editor2DViewportHeight.value, 1);
+		const viewportAspect = viewportWidth / viewportHeight;
+		const contentAspect = contentWidth / Math.max(contentHeight, 1);
+		const fitWidth =
+			viewportAspect > contentAspect
+				? contentHeight * viewportAspect
+				: contentWidth;
+		const fitHeight =
+			viewportAspect > contentAspect
+				? contentHeight
+				: contentWidth / Math.max(viewportAspect, 0.0001);
+		const nextZoom = clamp(zoom, EDITOR_2D_MIN_ZOOM, EDITOR_2D_MAX_ZOOM);
+		const viewWidth = fitWidth / nextZoom;
+		const viewHeight = fitHeight / nextZoom;
+		return {
+			contentWidth,
+			contentHeight,
+			fitWidth,
+			fitHeight,
+			viewWidth,
+			viewHeight,
+			maxPanX: Math.max(0, (fitWidth - viewWidth) / 2),
+			maxPanY: Math.max(0, (fitHeight - viewHeight) / 2),
+		};
+	};
+	const get2DEditorViewFrame = (
+		zoom = editor2DZoom.value,
+		panX = editor2DPanX.value,
+		panY = editor2DPanY.value,
+	) => {
+		const metrics = get2DEditorViewMetrics(zoom);
+		const clampedPanX = clamp(panX, -metrics.maxPanX, metrics.maxPanX);
+		const clampedPanY = clamp(panY, -metrics.maxPanY, metrics.maxPanY);
+		const centerX = metrics.contentWidth / 2 + clampedPanX;
+		const centerY = metrics.contentHeight / 2 + clampedPanY;
+		return {
+			...metrics,
+			panX: clampedPanX,
+			panY: clampedPanY,
+			left: centerX - metrics.viewWidth / 2,
+			top: centerY - metrics.viewHeight / 2,
+		};
+	};
+	const set2DEditorView = (
+		zoom = editor2DZoom.value,
+		panX = editor2DPanX.value,
+		panY = editor2DPanY.value,
+	) => {
+		const nextZoom = clamp(zoom, EDITOR_2D_MIN_ZOOM, EDITOR_2D_MAX_ZOOM);
+		const frame = get2DEditorViewFrame(nextZoom, panX, panY);
+		editor2DZoom.value = nextZoom;
+		editor2DPanX.value = frame.panX;
+		editor2DPanY.value = frame.panY;
+	};
+	const get2DEditorInitialZoom = () => {
+		const metrics = get2DEditorViewMetrics(1);
+		const fitScale = Math.min(
+			editor2DViewportWidth.value / Math.max(metrics.fitWidth, 1),
+			editor2DViewportHeight.value / Math.max(metrics.fitHeight, 1),
+		);
+		const tilePixelsAtFit = tileSize * fitScale;
+		if (tilePixelsAtFit <= EDITOR_2D_INITIAL_MAX_TILE_PX) return 1;
+		return clamp(
+			EDITOR_2D_INITIAL_MAX_TILE_PX / Math.max(tilePixelsAtFit, 1),
+			EDITOR_2D_MIN_ZOOM,
+			1,
+		);
+	};
+	const fit2DEditorInitialView = () => {
+		if (editor2DViewportWidth.value <= 1 || editor2DViewportHeight.value <= 1)
+			return;
+		set2DEditorView(get2DEditorInitialZoom(), 0, 0);
+	};
+	const set2DEditorViewFromAnchor = ({
+		nextZoom,
+		anchorClientX,
+		anchorClientY,
+		targetClientX = anchorClientX,
+		targetClientY = anchorClientY,
+		baseZoom = editor2DZoom.value,
+		basePanX = editor2DPanX.value,
+		basePanY = editor2DPanY.value,
+	}) => {
+		if (!editor2DViewportEl) {
+			set2DEditorView(nextZoom, basePanX, basePanY);
+			return;
+		}
+		const rect = editor2DViewportEl.getBoundingClientRect();
+		const widthPx = Math.max(rect.width, 1);
+		const heightPx = Math.max(rect.height, 1);
+		const anchorRatioX = clamp(
+			(anchorClientX - rect.left) / widthPx,
+			0,
+			1,
+		);
+		const anchorRatioY = clamp(
+			(anchorClientY - rect.top) / heightPx,
+			0,
+			1,
+		);
+		const targetRatioX = clamp(
+			(targetClientX - rect.left) / widthPx,
+			0,
+			1,
+		);
+		const targetRatioY = clamp(
+			(targetClientY - rect.top) / heightPx,
+			0,
+			1,
+		);
+		const sourceFrame = get2DEditorViewFrame(baseZoom, basePanX, basePanY);
+		const anchorX = sourceFrame.left + anchorRatioX * sourceFrame.viewWidth;
+		const anchorY = sourceFrame.top + anchorRatioY * sourceFrame.viewHeight;
+		const nextMetrics = get2DEditorViewMetrics(nextZoom);
+		const nextCenterX =
+			anchorX + (0.5 - targetRatioX) * nextMetrics.viewWidth;
+		const nextCenterY =
+			anchorY + (0.5 - targetRatioY) * nextMetrics.viewHeight;
+		set2DEditorView(
+			nextZoom,
+			nextCenterX - nextMetrics.contentWidth / 2,
+			nextCenterY - nextMetrics.contentHeight / 2,
+		);
+	};
+	const update2DEditorViewportSize = () => {
+		if (!editor2DViewportEl) return;
+		const rect = editor2DViewportEl.getBoundingClientRect();
+		editor2DViewportWidth.value = Math.max(1, Math.floor(rect.width));
+		editor2DViewportHeight.value = Math.max(1, Math.floor(rect.height));
+	};
+	const attach2DEditorViewport = (el) => {
+		editor2DViewportEl = el;
+		editor2DResizeObserver?.disconnect();
+		editor2DResizeObserver = null;
+
+		if (el && typeof ResizeObserver !== "undefined") {
+			editor2DResizeObserver = new ResizeObserver(update2DEditorViewportSize);
+			editor2DResizeObserver.observe(el);
+			queueMicrotask(update2DEditorViewportSize);
+		}
+	};
+	const begin2DEditorTouchGesture = () => {
+		const points = [...editor2DActiveTouches.values()];
+		if (points.length < 2) return;
+		const [a, b] = points;
+		editor2DGestureStartZoom = editor2DZoom.value;
+		editor2DGestureStartPanX = editor2DPanX.value;
+		editor2DGestureStartPanY = editor2DPanY.value;
+		editor2DGestureStartDistance = Math.max(
+			1,
+			Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
+		);
+		editor2DGestureStartCenterX = (a.clientX + b.clientX) / 2;
+		editor2DGestureStartCenterY = (a.clientY + b.clientY) / 2;
+	};
+	const update2DEditorTouchGesture = () => {
+		const points = [...editor2DActiveTouches.values()];
+		if (points.length < 2) return;
+		const [a, b] = points;
+		const centerX = (a.clientX + b.clientX) / 2;
+		const centerY = (a.clientY + b.clientY) / 2;
+		const nextZoom =
+			editor2DGestureStartZoom *
+			(Math.max(1, Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)) /
+				editor2DGestureStartDistance);
+		set2DEditorViewFromAnchor({
+			nextZoom,
+			anchorClientX: editor2DGestureStartCenterX,
+			anchorClientY: editor2DGestureStartCenterY,
+			targetClientX: centerX,
+			targetClientY: centerY,
+			baseZoom: editor2DGestureStartZoom,
+			basePanX: editor2DGestureStartPanX,
+			basePanY: editor2DGestureStartPanY,
+		});
+	};
+	const editor2DViewBox = $(() => {
+		const frame = get2DEditorViewFrame(
+			editor2DZoom.value,
+			editor2DPanX.value,
+			editor2DPanY.value,
+		);
+		return `${frame.left} ${frame.top} ${frame.viewWidth} ${frame.viewHeight}`;
+	});
+	const editor2DBackgroundStyle = $(() =>
+		resolvedTheme.value === "dark"
+			? "background: linear-gradient(180deg, #0f172a 0%, #020617 100%);"
+			: "background: linear-gradient(180deg, #f8fafc 0%, #dbeafe 100%);",
+	);
+	const editor2DBoardFill = $(() =>
+		resolvedTheme.value === "dark" ? "#020617" : "#000000",
+	);
+	const editor2DEmptyFill = $(() =>
+		resolvedTheme.value === "dark" ? "#e2e8f0" : "#ffffff",
+	);
+	const editor2DResizeButtonFill = $(() =>
+		resolvedTheme.value === "dark" ? "#0f172a" : "#ffffff",
+	);
+	const editor2DResizeButtonStroke = $(() =>
+		resolvedTheme.value === "dark" ? "#334155" : "#cbd5e1",
+	);
+	const editor2DResizeButtonText = $(() =>
+		resolvedTheme.value === "dark" ? "#e2e8f0" : "#334155",
+	);
+	const editor2DTopControlY = pad / 2;
+	const editor2DLeftControlX = pad / 2;
+	const editor2DRightControlX = $(() => svgW.value - pad / 2);
+	const editor2DBottomControlY = $(() => svgH.value - pad / 2);
+	const editor2DCenterX = $(() => svgW.value / 2);
+	const editor2DCenterY = $(() => svgH.value / 2);
+	const editor2DTopAddX = $(() => editor2DCenterX.value - EDITOR_2D_RESIZE_BUTTON_OFFSET);
+	const editor2DTopRemoveX = $(() => editor2DCenterX.value + EDITOR_2D_RESIZE_BUTTON_OFFSET);
+	const editor2DBottomAddX = $(() => editor2DCenterX.value - EDITOR_2D_RESIZE_BUTTON_OFFSET);
+	const editor2DBottomRemoveX = $(() => editor2DCenterX.value + EDITOR_2D_RESIZE_BUTTON_OFFSET);
+	const editor2DLeftAddY = $(() => editor2DCenterY.value - EDITOR_2D_RESIZE_BUTTON_OFFSET);
+	const editor2DLeftRemoveY = $(() => editor2DCenterY.value + EDITOR_2D_RESIZE_BUTTON_OFFSET);
+	const editor2DRightAddY = $(() => editor2DCenterY.value - EDITOR_2D_RESIZE_BUTTON_OFFSET);
+	const editor2DRightRemoveY = $(() => editor2DCenterY.value + EDITOR_2D_RESIZE_BUTTON_OFFSET);
+	const editor2DHintClass = $(() =>
+		isMobileLayout.value
+			? "pointer-events-none absolute left-1/2 bottom-20 z-10 w-[min(calc(100%-2rem),320px)] -translate-x-1/2 rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-center text-[11px] font-medium text-slate-500 backdrop-blur dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-400"
+			: "pointer-events-none absolute right-4 bottom-4 z-10 rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-[11px] font-medium text-slate-500 backdrop-blur dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-400",
+	);
 
 	const toNodeXY = (gx, gy) => ({ x: pad + gx * step, y: pad + gy * step });
 
@@ -1333,23 +1672,199 @@ export default function App() {
 	};
 	document.addEventListener("pointerdown", onPointerDown);
 	onDispose(() => document.removeEventListener("pointerdown", onPointerDown));
+	onDispose(() => editor2DResizeObserver?.disconnect());
 
-	const ResizeButtons = ({ onPlus, onMinus, vertical }) => (
-		<div
-			class={
-				vertical
-					? "flex flex-col gap-1 items-center"
-					: "flex flex-row gap-1 items-center"
+	watch(() => {
+		const frame = get2DEditorViewFrame(
+			editor2DZoom.value,
+			editor2DPanX.value,
+			editor2DPanY.value,
+		);
+		if (frame.panX !== editor2DPanX.value) editor2DPanX.value = frame.panX;
+		if (frame.panY !== editor2DPanY.value) editor2DPanY.value = frame.panY;
+	});
+	watch(() => {
+		editor2DViewportWidth.value;
+		editor2DViewportHeight.value;
+		svgW.value;
+		svgH.value;
+		if (!editor2DHasManualNavigation) fit2DEditorInitialView();
+	});
+
+	const start2DEditorPointerSession = (pointerId, clientX, clientY, action) => {
+		editor2DPointerId = pointerId;
+		editor2DDragStartX = clientX;
+		editor2DDragStartY = clientY;
+		editor2DDragStartPanX = editor2DPanX.value;
+		editor2DDragStartPanY = editor2DPanY.value;
+		editor2DPressedAction = action;
+		editor2DIsDragging = false;
+		if (editor2DViewportEl) editor2DViewportEl.style.cursor = "grabbing";
+	};
+
+	const finish2DEditorPointerSession = () => {
+		editor2DPointerId = null;
+		editor2DPressedAction = null;
+		editor2DIsDragging = false;
+		if (editor2DViewportEl) editor2DViewportEl.style.cursor = "grab";
+	};
+
+	const on2DEditorPointerDown = (event) => {
+		const action = read2DEditorAction(event.target);
+
+		if (event.pointerType === "touch") {
+			editor2DActiveTouches.set(event.pointerId, {
+				pointerId: event.pointerId,
+				clientX: event.clientX,
+				clientY: event.clientY,
+			});
+			event.currentTarget?.setPointerCapture?.(event.pointerId);
+			if (editor2DActiveTouches.size >= 2) {
+				editor2DPressedAction = null;
+				editor2DGestureActive = true;
+				editor2DHasManualNavigation = true;
+				begin2DEditorTouchGesture();
+				return;
 			}
-		>
-			<button class={iconButtonClass} on:click={onPlus}>
-				+
-			</button>
-			<button class={iconButtonClass} on:click={onMinus}>
-				-
-			</button>
-		</div>
-	);
+			editor2DGestureActive = false;
+			start2DEditorPointerSession(
+				event.pointerId,
+				event.clientX,
+				event.clientY,
+				action,
+			);
+			return;
+		}
+
+		if (event.button > 2) return;
+
+		event.preventDefault();
+		start2DEditorPointerSession(
+			event.pointerId,
+			event.clientX,
+			event.clientY,
+			action,
+		);
+		event.currentTarget?.setPointerCapture?.(event.pointerId);
+	};
+
+	const on2DEditorPointerMove = (event) => {
+		if (event.pointerType === "touch") {
+			if (!editor2DActiveTouches.has(event.pointerId)) return;
+			editor2DActiveTouches.set(event.pointerId, {
+				pointerId: event.pointerId,
+				clientX: event.clientX,
+				clientY: event.clientY,
+			});
+			if (editor2DActiveTouches.size >= 2) {
+				editor2DPressedAction = null;
+				editor2DGestureActive = true;
+				editor2DHasManualNavigation = true;
+				update2DEditorTouchGesture();
+				return;
+			}
+
+			if (event.pointerId !== editor2DPointerId) return;
+			const dx = event.clientX - editor2DDragStartX;
+			const dy = event.clientY - editor2DDragStartY;
+			if (
+				!editor2DIsDragging &&
+				Math.hypot(dx, dy) < EDITOR_2D_DRAG_THRESHOLD
+			) {
+				return;
+			}
+			editor2DIsDragging = true;
+			editor2DHasManualNavigation = true;
+			editor2DPressedAction = null;
+			const frame = get2DEditorViewFrame(
+				editor2DZoom.value,
+				editor2DDragStartPanX,
+				editor2DDragStartPanY,
+			);
+			set2DEditorView(
+				editor2DZoom.value,
+				editor2DDragStartPanX -
+					dx * (frame.viewWidth / Math.max(editor2DViewportWidth.value, 1)),
+				editor2DDragStartPanY -
+					dy * (frame.viewHeight / Math.max(editor2DViewportHeight.value, 1)),
+			);
+			return;
+		}
+
+		if (event.pointerId !== editor2DPointerId) return;
+		const dx = event.clientX - editor2DDragStartX;
+		const dy = event.clientY - editor2DDragStartY;
+		if (
+			!editor2DIsDragging &&
+			Math.hypot(dx, dy) < EDITOR_2D_DRAG_THRESHOLD
+		) {
+			return;
+		}
+		editor2DIsDragging = true;
+		editor2DHasManualNavigation = true;
+		editor2DPressedAction = null;
+		const frame = get2DEditorViewFrame(
+			editor2DZoom.value,
+			editor2DDragStartPanX,
+			editor2DDragStartPanY,
+		);
+		set2DEditorView(
+			editor2DZoom.value,
+			editor2DDragStartPanX -
+				dx * (frame.viewWidth / Math.max(editor2DViewportWidth.value, 1)),
+			editor2DDragStartPanY -
+				dy * (frame.viewHeight / Math.max(editor2DViewportHeight.value, 1)),
+		);
+	};
+
+	const on2DEditorPointerFinish = (event) => {
+		if (event.pointerType === "touch") {
+			editor2DActiveTouches.delete(event.pointerId);
+			event.currentTarget?.releasePointerCapture?.(event.pointerId);
+			if (
+				event.pointerId === editor2DPointerId &&
+				!editor2DGestureActive &&
+				!editor2DIsDragging
+			) {
+				perform2DEditorAction(editor2DPressedAction);
+			}
+			if (editor2DActiveTouches.size >= 2) {
+				editor2DPressedAction = null;
+				editor2DGestureActive = true;
+				begin2DEditorTouchGesture();
+				return;
+			}
+			if (editor2DActiveTouches.size === 1) {
+				const [remainingPoint] = editor2DActiveTouches.values();
+				editor2DGestureActive = false;
+				start2DEditorPointerSession(
+					remainingPoint.pointerId,
+					remainingPoint.clientX,
+					remainingPoint.clientY,
+					null,
+				);
+				return;
+			}
+			editor2DGestureActive = false;
+			finish2DEditorPointerSession();
+			return;
+		}
+
+		if (event.pointerId !== editor2DPointerId) return;
+		if (!editor2DIsDragging) perform2DEditorAction(editor2DPressedAction);
+		finish2DEditorPointerSession();
+		event.currentTarget?.releasePointerCapture?.(event.pointerId);
+	};
+
+	const on2DEditorWheel = (event) => {
+		event.preventDefault();
+		editor2DHasManualNavigation = true;
+		set2DEditorViewFromAnchor({
+			nextZoom: editor2DZoom.value * Math.exp(-event.deltaY * 0.0015),
+			anchorClientX: event.clientX,
+			anchorClientY: event.clientY,
+		});
+	};
 
 	const configPanelClass = $(() => {
 		const mobile = isMobileLayout.value;
@@ -2093,39 +2608,78 @@ export default function App() {
 				{/* Editor Surface */}
 				<If condition={previewMode.eq("2d")}>
 					{() => (
-						<div class="flex-1 overflow-x-auto overflow-y-auto p-4 sm:p-8 lg:p-12 flex bg-gray-50/50 relative scrollbar-hide dark:bg-slate-900/40">
-							<div class="flex min-w-max min-h-full flex-col items-center justify-center gap-8 m-auto">
-								<div class="flex min-w-max min-h-full flex-col items-center justify-center gap-6">
-									<ResizeButtons
-										onPlus={() =>
-											updateSize(width.value, height.value + 1, 0, 1)
-										}
-										onMinus={() =>
-											updateSize(width.value, height.value - 1, 0, -1)
-										}
-									/>
-									<div class="flex items-center gap-6">
-										<ResizeButtons
-											vertical
-											onPlus={() =>
-												updateSize(width.value + 1, height.value, 1, 0)
-											}
-											onMinus={() =>
-												updateSize(width.value - 1, height.value, -1, 0)
-											}
-										/>
-										<div class="bg-white rounded-2xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-gray-100 flex items-center justify-center dark:bg-slate-900 dark:border-slate-700 dark:shadow-[0_24px_80px_rgba(2,6,23,0.55)]">
-											<svg
-												attr:width={svgW}
-												attr:height={svgH}
-												class="rounded-lg border border-gray-100 bg-white dark:border-slate-700"
-											>
+						<div class="flex-1 min-h-0 relative overflow-hidden bg-white dark:bg-slate-950">
+							<div class="absolute inset-0" style={editor2DBackgroundStyle}></div>
+							<div
+								class="absolute inset-0 cursor-grab select-none"
+								style="touch-action: none;"
+								$ref={attach2DEditorViewport}
+								on:contextmenu={(event) => event.preventDefault()}
+								on:pointerdown={on2DEditorPointerDown}
+								on:pointermove={on2DEditorPointerMove}
+								on:pointerup={on2DEditorPointerFinish}
+								on:pointercancel={on2DEditorPointerFinish}
+								on:wheel={on2DEditorWheel}
+							>
+								<svg
+									attr:viewBox={editor2DViewBox}
+									attr:preserveAspectRatio="xMidYMid meet"
+									class="block h-full w-full"
+								>
+												<Editor2DResizeButton
+													cx={editor2DTopAddX}
+													cy={editor2DTopControlY}
+													label="+"
+													action="top-add"
+												/>
+												<Editor2DResizeButton
+													cx={editor2DTopRemoveX}
+													cy={editor2DTopControlY}
+													label="-"
+													action="top-remove"
+												/>
+												<Editor2DResizeButton
+													cx={editor2DLeftControlX}
+													cy={editor2DLeftAddY}
+													label="+"
+													action="left-add"
+												/>
+												<Editor2DResizeButton
+													cx={editor2DLeftControlX}
+													cy={editor2DLeftRemoveY}
+													label="-"
+													action="left-remove"
+												/>
+												<Editor2DResizeButton
+													cx={editor2DRightControlX}
+													cy={editor2DRightAddY}
+													label="+"
+													action="right-add"
+												/>
+												<Editor2DResizeButton
+													cx={editor2DRightControlX}
+													cy={editor2DRightRemoveY}
+													label="-"
+													action="right-remove"
+												/>
+												<Editor2DResizeButton
+													cx={editor2DBottomAddX}
+													cy={editor2DBottomControlY}
+													label="+"
+													action="bottom-add"
+												/>
+												<Editor2DResizeButton
+													cx={editor2DBottomRemoveX}
+													cy={editor2DBottomControlY}
+													label="-"
+													action="bottom-remove"
+												/>
 												<rect
 													attr:x={pad}
 													attr:y={pad}
 													attr:width={boardW}
 													attr:height={boardH}
-													attr:fill="#000"
+													attr:fill={editor2DBoardFill}
 												/>
 
 												<For entries={tiles} track="id">
@@ -2141,7 +2695,7 @@ export default function App() {
 																		attr:y={pad + ty * tileSize}
 																		attr:width={tileSize}
 																		attr:height={tileSize}
-																		attr:fill="#fff"
+																		attr:fill={editor2DEmptyFill}
 																	/>
 																)}
 															</If>
@@ -2168,7 +2722,7 @@ export default function App() {
 																			attr:y={sq.y}
 																			attr:width={sq.w}
 																			attr:height={sq.h}
-																			attr:fill="#000"
+																			attr:fill={editor2DBoardFill}
 																		/>
 																		<rect
 																			attr:x={sq.x + border}
@@ -2216,13 +2770,14 @@ export default function App() {
 												<For entries={tiles} track="id">
 													{({ item: { tx, ty, gx, gy } }) => (
 														<rect
+															attr:data-editor-action="tile"
+															attr:data-gx={gx}
+															attr:data-gy={gy}
 															attr:x={pad + tx * tileSize}
 															attr:y={pad + ty * tileSize}
 															attr:width={tileSize}
 															attr:height={tileSize}
 															attr:fill="transparent"
-															on:click={() => toggleTile(gx, gy)}
-															style="cursor: pointer"
 														/>
 													)}
 												</For>
@@ -2232,29 +2787,21 @@ export default function App() {
 														const { x, y } = toNodeXY(gx, gy);
 														return (
 															<circle
+																attr:data-editor-action="node"
+																attr:data-gx={gx}
+																attr:data-gy={gy}
 																attr:cx={x}
 																attr:cy={y}
 																attr:r={20}
 																attr:fill="transparent"
-																on:click={() => cycleNode(gx, gy)}
-																style="cursor: pointer"
 															/>
 														);
 													}}
 												</For>
-											</svg>
-										</div>
-										<ResizeButtons
-											vertical
-											onPlus={() => updateSize(width.value + 1, height.value)}
-											onMinus={() => updateSize(width.value - 1, height.value)}
-										/>
-									</div>
-									<ResizeButtons
-										onPlus={() => updateSize(width.value, height.value + 1)}
-										onMinus={() => updateSize(width.value, height.value - 1)}
-									/>
-								</div>
+								</svg>
+							</div>
+							<div class={editor2DHintClass}>
+								Drag to pan. Wheel or pinch to zoom. Tap to edit.
 							</div>
 						</div>
 					)}
@@ -2267,6 +2814,7 @@ export default function App() {
 								loading={previewLoading}
 								error={previewError}
 								theme={resolvedTheme}
+								mobileLayout={isMobileLayout}
 							/>
 						</div>
 					)}
