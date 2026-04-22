@@ -477,8 +477,16 @@ function diamondPoints(x, y, r) {
 	return `${x},${y - r} ${x + r},${y} ${x},${y + r} ${x - r},${y}`;
 }
 
+function diamondPath(x, y, r) {
+	return `M ${x} ${y - r} L ${x + r} ${y} L ${x} ${y + r} L ${x - r} ${y} Z`;
+}
+
 function squareTile(x, y, size) {
 	return { x: x - size / 2, y: y - size / 2, w: size, h: size };
+}
+
+function rectPath(x, y, w, h) {
+	return `M ${x} ${y} H ${x + w} V ${y + h} H ${x} Z`;
 }
 
 function resizeMask(
@@ -520,7 +528,14 @@ function resizeMask(
 
 // --- Components ---
 
-const OuterCornerGlyph = ({ dir, x, y, chamfer }) => {
+const OuterCornerGlyph = ({
+	dir,
+	x,
+	y,
+	chamfer,
+	outerFill = "#000",
+	innerFill = "#fff",
+}) => {
 	const outer = 13;
 	const inner = 6.4;
 
@@ -534,13 +549,13 @@ const OuterCornerGlyph = ({ dir, x, y, chamfer }) => {
 					<g>
 						<polygon
 							attr:points={`${x},${y} ${x + outer},${y} ${x},${y + outer}`}
-							attr:fill="#000"
+							attr:fill={outerFill}
 						/>
 						<If condition={isChamfer}>
 							{() => (
 								<polygon
 									attr:points={`${x},${y} ${x + inner},${y} ${x},${y + inner}`}
-									attr:fill="#fff"
+									attr:fill={innerFill}
 								/>
 							)}
 						</If>
@@ -552,13 +567,13 @@ const OuterCornerGlyph = ({ dir, x, y, chamfer }) => {
 					<g>
 						<polygon
 							attr:points={`${x},${y} ${x - outer},${y} ${x},${y + outer}`}
-							attr:fill="#000"
+							attr:fill={outerFill}
 						/>
 						<If condition={isChamfer}>
 							{() => (
 								<polygon
 									attr:points={`${x},${y} ${x - inner},${y} ${x},${y + inner}`}
-									attr:fill="#fff"
+									attr:fill={innerFill}
 								/>
 							)}
 						</If>
@@ -570,13 +585,13 @@ const OuterCornerGlyph = ({ dir, x, y, chamfer }) => {
 					<g>
 						<polygon
 							attr:points={`${x},${y} ${x + outer},${y} ${x},${y - outer}`}
-							attr:fill="#000"
+							attr:fill={outerFill}
 						/>
 						<If condition={isChamfer}>
 							{() => (
 								<polygon
 									attr:points={`${x},${y} ${x + inner},${y} ${x},${y - inner}`}
-									attr:fill="#fff"
+									attr:fill={innerFill}
 								/>
 							)}
 						</If>
@@ -588,13 +603,13 @@ const OuterCornerGlyph = ({ dir, x, y, chamfer }) => {
 					<g>
 						<polygon
 							attr:points={`${x},${y} ${x - outer},${y} ${x},${y - outer}`}
-							attr:fill="#000"
+							attr:fill={outerFill}
 						/>
 						<If condition={isChamfer}>
 							{() => (
 								<polygon
 									attr:points={`${x},${y} ${x - inner},${y} ${x},${y - inner}`}
-									attr:fill="#fff"
+									attr:fill={innerFill}
 								/>
 							)}
 						</If>
@@ -605,7 +620,7 @@ const OuterCornerGlyph = ({ dir, x, y, chamfer }) => {
 	);
 };
 
-const EdgeGlyph = ({ state, x, y, dir }) => {
+const EdgeGlyph = ({ state, x, y, dir, outerFill = "#000", innerFill = "#fff" }) => {
 	const outer = 13;
 	const inner = 6.4;
 	const hole = 5.0;
@@ -641,20 +656,20 @@ const EdgeGlyph = ({ state, x, y, dir }) => {
 
 	return (
 		<g>
-			<polygon attr:points={points} attr:fill="#000" />
+			<polygon attr:points={points} attr:fill={outerFill} />
 			<If condition={$(() => currentState.value === "chamfer")}>
-				{() => <polygon attr:points={innerPoints} attr:fill="#fff" />}
+				{() => <polygon attr:points={innerPoints} attr:fill={innerFill} />}
 			</If>
 			<If condition={$(() => currentState.value === "hole")}>
 				{() => (
-					<circle attr:cx={x} attr:cy={y} attr:r={hole} attr:fill="#fff" />
+					<circle attr:cx={x} attr:cy={y} attr:r={hole} attr:fill={innerFill} />
 				)}
 			</If>
 		</g>
 	);
 };
 
-const CenterGlyph = ({ state, x, y }) => {
+const CenterGlyph = ({ state, x, y, outerFill = "#000", innerFill = "#fff" }) => {
 	const outer = 13;
 	const inner = 6.4;
 	const hole = 5.0;
@@ -663,40 +678,47 @@ const CenterGlyph = ({ state, x, y }) => {
 
 	return (
 		<g>
-			<polygon attr:points={diamondPoints(x, y, outer)} attr:fill="#000" />
+			<polygon attr:points={diamondPoints(x, y, outer)} attr:fill={outerFill} />
 			<If condition={$(() => currentState.value === "chamfer")}>
 				{() => (
-					<polygon attr:points={diamondPoints(x, y, inner)} attr:fill="#fff" />
+					<polygon attr:points={diamondPoints(x, y, inner)} attr:fill={innerFill} />
 				)}
 			</If>
 			<If condition={$(() => currentState.value === "hole")}>
 				{() => (
-					<circle attr:cx={x} attr:cy={y} attr:r={hole} attr:fill="#fff" />
+					<circle attr:cx={x} attr:cy={y} attr:r={hole} attr:fill={innerFill} />
 				)}
 			</If>
 		</g>
 	);
 };
 
-const NodeGlyph = ({ kind, state, x, y, dir }) => {
+const NodeGlyph = ({
+	kind,
+	state,
+	x,
+	y,
+	dir,
+	outerFill = "#000",
+	innerFill = "#fff",
+}) => {
 	const k = $(() => read(kind));
+	const currentState = $(() => read(state));
+	const visible = $(() =>
+		["outer", "edge", "inner", "full", "diag"].includes(k.value),
+	);
 	return (
 		<g>
-			<If condition={$(() => k.value === "outer")}>
+			<If condition={visible}>
 				{() => (
-					<OuterCornerGlyph
-						dir={dir}
+					<CenterGlyph
+						state={currentState}
 						x={x}
 						y={y}
-						chamfer={$(() => read(state) === "chamfer")}
+						outerFill={outerFill}
+						innerFill={innerFill}
 					/>
 				)}
-			</If>
-			<If condition={$(() => k.value === "edge")}>
-				{() => <EdgeGlyph state={state} x={x} y={y} dir={dir} />}
-			</If>
-			<If condition={$(() => ["inner", "full", "diag"].includes(k.value))}>
-				{() => <CenterGlyph state={state} x={x} y={y} />}
 			</If>
 		</g>
 	);
@@ -1223,11 +1245,14 @@ export default function App() {
 	const step = tileSize / 2;
 	const pad = 32;
 	const half = tileSize / 2;
+	const editor2DBoardMaterialClipId = "editor-2d-board-material-clip";
+	const editor2DNodeMaskId = "editor-2d-node-mask";
 	const editor2DZoom = signal(1);
 	const editor2DPanX = signal(0);
 	const editor2DPanY = signal(0);
 	const editor2DViewportWidth = signal(1);
 	const editor2DViewportHeight = signal(1);
+	const editor2DShowHint = signal(true);
 
 	let editor2DViewportEl = null;
 	let editor2DResizeObserver = null;
@@ -1446,10 +1471,7 @@ export default function App() {
 			: "background: linear-gradient(180deg, #f8fafc 0%, #dbeafe 100%);",
 	);
 	const editor2DBoardFill = $(() =>
-		resolvedTheme.value === "dark" ? "#020617" : "#000000",
-	);
-	const editor2DEmptyFill = $(() =>
-		resolvedTheme.value === "dark" ? "#e2e8f0" : "#ffffff",
+		resolvedTheme.value === "dark" ? "#f8fafc" : "#000000",
 	);
 	const editor2DResizeButtonFill = $(() =>
 		resolvedTheme.value === "dark" ? "#0f172a" : "#ffffff",
@@ -1512,6 +1534,50 @@ export default function App() {
 			}
 		}
 		return items;
+	});
+	const editor2DBoardMaterialPath = $(() => {
+		const parts = [];
+		for (const { tx, ty, gx, gy } of tiles.value) {
+			if (!tileFill(getMask(maskGrid.value, gx, gy))) continue;
+			const x = pad + tx * tileSize + half;
+			const y = pad + ty * tileSize + half;
+			const sq = squareTile(x, y, tileSize);
+			parts.push(rectPath(sq.x, sq.y, sq.w, sq.h));
+		}
+		for (const { gx, gy } of nodes.value) {
+			const kind = topo.value.nodeKind[gy]?.[gx] ?? "none";
+			if (kind !== "inner" && kind !== "diag") continue;
+			const { x, y } = toNodeXY(gx, gy);
+			parts.push(diamondPath(x, y, 13));
+		}
+		return parts.join(" ");
+	});
+	const editor2DActiveTileInsetPath = $(() => {
+		const parts = [];
+		const border = 3;
+		for (const { tx, ty, gx, gy } of tiles.value) {
+			if (!tileFill(getMask(maskGrid.value, gx, gy))) continue;
+			const x = pad + tx * tileSize + half;
+			const y = pad + ty * tileSize + half;
+			const sq = squareTile(x, y, tileSize);
+			parts.push(
+				rectPath(
+					sq.x + border,
+					sq.y + border,
+					sq.w - border * 2,
+					sq.h - border * 2,
+				),
+			);
+		}
+		return parts.join(" ");
+	});
+	const editor2DNodeOverlayPath = $(() => {
+		const parts = [];
+		for (const { gx, gy } of nodes.value) {
+			const { x, y } = toNodeXY(gx, gy);
+			parts.push(diamondPath(x, y, 13));
+		}
+		return parts.join(" ");
 	});
 
 	const inputClass =
@@ -1710,6 +1776,7 @@ export default function App() {
 	};
 
 	const on2DEditorPointerDown = (event) => {
+		editor2DShowHint.value = false;
 		const action = read2DEditorAction(event.target);
 
 		if (event.pointerType === "touch") {
@@ -1858,6 +1925,7 @@ export default function App() {
 
 	const on2DEditorWheel = (event) => {
 		event.preventDefault();
+		editor2DShowHint.value = false;
 		editor2DHasManualNavigation = true;
 		set2DEditorViewFromAnchor({
 			nextZoom: editor2DZoom.value * Math.exp(-event.deltaY * 0.0015),
@@ -2625,7 +2693,123 @@ export default function App() {
 									attr:viewBox={editor2DViewBox}
 									attr:preserveAspectRatio="xMidYMid meet"
 									class="block h-full w-full"
+									style="background: transparent;"
 								>
+												<defs>
+													<clipPath
+														attr:id={editor2DBoardMaterialClipId}
+														attr:clipPathUnits="userSpaceOnUse"
+													>
+														<path attr:d={editor2DBoardMaterialPath} />
+													</clipPath>
+													<mask
+														attr:id={editor2DNodeMaskId}
+														attr:maskUnits="userSpaceOnUse"
+														attr:maskContentUnits="userSpaceOnUse"
+														attr:x="0"
+														attr:y="0"
+														attr:width={svgW}
+														attr:height={svgH}
+													>
+														<rect
+															attr:x="0"
+															attr:y="0"
+															attr:width={svgW}
+															attr:height={svgH}
+															attr:fill="white"
+														/>
+
+														<For entries={nodes} track="id">
+															{({ item: { gx, gy } }) => {
+																const { x, y } = toNodeXY(gx, gy);
+																const kind = $(
+																	() => topo.value.nodeKind[gy]?.[gx] ?? "none",
+																);
+																const dir = $(
+																	() => topo.value.nodeDir[gy]?.[gx] ?? null,
+																);
+																const state = $(() =>
+																	nodeState(
+																		kind.value,
+																		getMask(maskGrid.value, gx, gy),
+																	),
+																);
+																return (
+																	<NodeGlyph
+																		kind={kind}
+																		state={state}
+																		x={x}
+																		y={y}
+																		dir={dir}
+																		outerFill="none"
+																		innerFill="black"
+																	/>
+																);
+															}}
+														</For>
+													</mask>
+												</defs>
+
+												<g attr:mask={`url(#${editor2DNodeMaskId})`}>
+													<If condition={$(() => !!editor2DBoardMaterialPath.value)}>
+														{() => (
+															<path
+																attr:d={editor2DBoardMaterialPath}
+																attr:fill={editor2DBoardFill}
+															/>
+														)}
+													</If>
+													<If condition={$(() => !!editor2DActiveTileInsetPath.value)}>
+														{() => (
+															<path
+																attr:d={editor2DActiveTileInsetPath}
+																attr:fill="#2563eb"
+															/>
+														)}
+													</If>
+													<If condition={$(() => !!editor2DNodeOverlayPath.value)}>
+														{() => (
+															<path
+																attr:d={editor2DNodeOverlayPath}
+																attr:fill={editor2DBoardFill}
+																attr:clip-path={`url(#${editor2DBoardMaterialClipId})`}
+															/>
+														)}
+													</If>
+												</g>
+
+												<For entries={tiles} track="id">
+													{({ item: { tx, ty, gx, gy } }) => (
+														<rect
+															attr:data-editor-action="tile"
+															attr:data-gx={gx}
+															attr:data-gy={gy}
+															attr:x={pad + tx * tileSize}
+															attr:y={pad + ty * tileSize}
+															attr:width={tileSize}
+															attr:height={tileSize}
+															attr:fill="transparent"
+														/>
+													)}
+												</For>
+
+												<For entries={nodes} track="id">
+													{({ item: { gx, gy } }) => {
+														const { x, y } = toNodeXY(gx, gy);
+														return (
+															<circle
+																attr:data-editor-action="node"
+																attr:data-gx={gx}
+																attr:data-gy={gy}
+																attr:cx={x}
+																attr:cy={y}
+																attr:r={20}
+																attr:fill="transparent"
+															/>
+														);
+													}}
+												</For>
+
 												<Editor2DResizeButton
 													cx={editor2DTopAddX}
 													cy={editor2DTopControlY}
@@ -2674,135 +2858,15 @@ export default function App() {
 													label="-"
 													action="bottom-remove"
 												/>
-												<rect
-													attr:x={pad}
-													attr:y={pad}
-													attr:width={boardW}
-													attr:height={boardH}
-													attr:fill={editor2DBoardFill}
-												/>
-
-												<For entries={tiles} track="id">
-													{({ item: { tx, ty, gx, gy } }) => {
-														const active = $(() =>
-															tileFill(read(getMask(maskGrid.value, gx, gy))),
-														);
-														return (
-															<If condition={$(() => !active.value)}>
-																{() => (
-																	<rect
-																		attr:x={pad + tx * tileSize}
-																		attr:y={pad + ty * tileSize}
-																		attr:width={tileSize}
-																		attr:height={tileSize}
-																		attr:fill={editor2DEmptyFill}
-																	/>
-																)}
-															</If>
-														);
-													}}
-												</For>
-
-												<For entries={tiles} track="id">
-													{({ item: { tx, ty, gx, gy } }) => {
-														const active = $(() =>
-															tileFill(read(getMask(maskGrid.value, gx, gy))),
-														);
-														const x = pad + tx * tileSize + half;
-														const y = pad + ty * tileSize + half;
-														const sq = squareTile(x, y, tileSize);
-														const border = 3;
-
-														return (
-															<If condition={active}>
-																{() => (
-																	<g>
-																		<rect
-																			attr:x={sq.x}
-																			attr:y={sq.y}
-																			attr:width={sq.w}
-																			attr:height={sq.h}
-																			attr:fill={editor2DBoardFill}
-																		/>
-																		<rect
-																			attr:x={sq.x + border}
-																			attr:y={sq.y + border}
-																			attr:width={sq.w - border * 2}
-																			attr:height={sq.h - border * 2}
-																			attr:fill="#2563eb"
-																		/>
-																	</g>
-																)}
-															</If>
-														);
-													}}
-												</For>
-
-												<For entries={nodes} track="id">
-													{({ item: { gx, gy } }) => {
-														const { x, y } = toNodeXY(gx, gy);
-														const kind = $(
-															() => topo.value.nodeKind[gy]?.[gx] ?? "none",
-														);
-														const dir = $(
-															() => topo.value.nodeDir[gy]?.[gx] ?? null,
-														);
-														const state = $(() =>
-															nodeState(
-																kind.value,
-																getMask(maskGrid.value, gx, gy),
-															),
-														);
-														return (
-															<g>
-																<NodeGlyph
-																	kind={kind}
-																	state={state}
-																	x={x}
-																	y={y}
-																	dir={dir}
-																/>
-															</g>
-														);
-													}}
-												</For>
-
-												<For entries={tiles} track="id">
-													{({ item: { tx, ty, gx, gy } }) => (
-														<rect
-															attr:data-editor-action="tile"
-															attr:data-gx={gx}
-															attr:data-gy={gy}
-															attr:x={pad + tx * tileSize}
-															attr:y={pad + ty * tileSize}
-															attr:width={tileSize}
-															attr:height={tileSize}
-															attr:fill="transparent"
-														/>
-													)}
-												</For>
-
-												<For entries={nodes} track="id">
-													{({ item: { gx, gy } }) => {
-														const { x, y } = toNodeXY(gx, gy);
-														return (
-															<circle
-																attr:data-editor-action="node"
-																attr:data-gx={gx}
-																attr:data-gy={gy}
-																attr:cx={x}
-																attr:cy={y}
-																attr:r={20}
-																attr:fill="transparent"
-															/>
-														);
-													}}
-												</For>
 								</svg>
 							</div>
-							<div class={editor2DHintClass}>
-								Drag to pan. Wheel or pinch to zoom. Tap to edit.
-							</div>
+							<If condition={editor2DShowHint}>
+								{() => (
+									<div class={editor2DHintClass}>
+										Drag to pan. Wheel or pinch to zoom. Tap to edit.
+									</div>
+								)}
+							</If>
 						</div>
 					)}
 				</If>
