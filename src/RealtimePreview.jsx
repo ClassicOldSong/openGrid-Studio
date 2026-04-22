@@ -174,6 +174,9 @@ function createProgram(gl) {
 
 const DEFAULT_YAW = 146
 const DEFAULT_PITCH = 34
+const MIN_ZOOM = 0.35
+const MAX_ZOOM = 4.5
+const AUTO_FIT_PADDING = 1.12
 
 function defaultRotation() {
 	const yaw = quatFromAxisAngle([0, 0, 1], (DEFAULT_YAW * Math.PI) / 180)
@@ -215,6 +218,11 @@ export default function RealtimePreview({ mesh, loading, error, theme }) {
 	let dragStartScaleX = 1
 	let dragStartScaleY = 1
 	let dragLastArcball = [0, 0, 1]
+	let gestureStartDistance = 1
+	let gestureStartZoom = 1
+	let gestureStartCenterX = 0
+	let gestureStartCenterY = 0
+	const activeTouchPoints = new Map()
 
 	let gl = null
 	let glProgram = null
@@ -223,6 +231,9 @@ export default function RealtimePreview({ mesh, loading, error, theme }) {
 	let vertexCount = 0
 	let sceneCenter = [0, 0, 0]
 	let sceneRadius = 1
+	let sceneBoundsCorners = []
+	let pendingAutoFit = false
+	let hasAutoFit = false
 
 	function requestDraw() {
 		if (rafId) return
@@ -248,6 +259,10 @@ export default function RealtimePreview({ mesh, loading, error, theme }) {
 		canvasEl.height = Math.max(1, Math.floor(height * dpr))
 		canvasEl.style.width = `${width}px`
 		canvasEl.style.height = `${height}px`
+		if (pendingAutoFit && vertexCount > 0) {
+			fitView({ resetRotation: false })
+			return
+		}
 		requestDraw()
 	}
 
@@ -302,6 +317,9 @@ export default function RealtimePreview({ mesh, loading, error, theme }) {
 		if (!gl || !glProgram || !positionBuffer || !normalBuffer) return
 		if (!meshData?.positions || !meshData?.indices || meshData.indices.length < 3) {
 			vertexCount = 0
+			sceneBoundsCorners = []
+			pendingAutoFit = false
+			hasAutoFit = false
 			return
 		}
 
@@ -339,6 +357,16 @@ export default function RealtimePreview({ mesh, loading, error, theme }) {
 			(bounds.min[1] + bounds.max[1]) / 2,
 			(bounds.min[2] + bounds.max[2]) / 2
 		]
+		sceneBoundsCorners = [
+			[bounds.min[0], bounds.min[1], bounds.min[2]],
+			[bounds.min[0], bounds.min[1], bounds.max[2]],
+			[bounds.min[0], bounds.max[1], bounds.min[2]],
+			[bounds.min[0], bounds.max[1], bounds.max[2]],
+			[bounds.max[0], bounds.min[1], bounds.min[2]],
+			[bounds.max[0], bounds.min[1], bounds.max[2]],
+			[bounds.max[0], bounds.max[1], bounds.min[2]],
+			[bounds.max[0], bounds.max[1], bounds.max[2]]
+		]
 		sceneRadius = Math.max(
 			1,
 			Math.hypot(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], bounds.max[2] - bounds.min[2]) / 2
@@ -349,6 +377,41 @@ export default function RealtimePreview({ mesh, loading, error, theme }) {
 		gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer)
 		gl.bufferData(gl.ARRAY_BUFFER, expandedNormals, gl.STATIC_DRAW)
 		vertexCount = indices.length
+		pendingAutoFit = !hasAutoFit
+	}
+
+	function fitView({ resetRotation } = { resetRotation: true }) {
+		if (resetRotation) rotation = defaultRotation()
+		focusX = 0
+		focusY = 0
+		focusZ = 0
+
+		if (!sceneBoundsCorners.length || width === 0 || height === 0) {
+			pendingAutoFit = vertexCount > 0
+			requestDraw()
+			return
+		}
+
+		const aspect = width / Math.max(height, 1)
+		let maxX = 0
+		let maxY = 0
+
+		for (const corner of sceneBoundsCorners) {
+			const localCorner = [
+				corner[0] - sceneCenter[0],
+				corner[1] - sceneCenter[1],
+				corner[2] - sceneCenter[2]
+			]
+			const rotatedCorner = quatRotateVec(rotation, localCorner)
+			maxX = Math.max(maxX, Math.abs(rotatedCorner[0]))
+			maxY = Math.max(maxY, Math.abs(rotatedCorner[1]))
+		}
+
+		const requiredHalfHeight = Math.max(maxY, maxX / Math.max(aspect, 0.0001), 0.0001) * AUTO_FIT_PADDING
+		zoom = clamp((sceneRadius * 1.08) / requiredHalfHeight, MIN_ZOOM, MAX_ZOOM)
+		pendingAutoFit = false
+		hasAutoFit = true
+		requestDraw()
 	}
 
 	function attachHost(el) {
@@ -373,12 +436,7 @@ export default function RealtimePreview({ mesh, loading, error, theme }) {
 	}
 
 	function resetView() {
-		rotation = defaultRotation()
-		zoom = 1
-		focusX = 0
-		focusY = 0
-		focusZ = 0
-		requestDraw()
+		fitView({ resetRotation: true })
 	}
 
 	function getPanBasis() {
@@ -387,6 +445,91 @@ export default function RealtimePreview({ mesh, loading, error, theme }) {
 			right: quatRotateVec(inverse, [1, 0, 0]),
 			up: quatRotateVec(inverse, [0, 1, 0])
 		}
+	}
+
+	function clearDragState() {
+		dragging = false
+		pointerId = null
+		dragMode = 'orbit'
+		if (canvasEl) canvasEl.style.cursor = 'grab'
+	}
+
+	function beginPanBaseline() {
+		dragStartFocus = [focusX, focusY, focusZ]
+		dragStartScaleX = panScaleX
+		dragStartScaleY = panScaleY
+		const basis = getPanBasis()
+		dragStartRight = basis.right
+		dragStartUp = basis.up
+	}
+
+	function beginTouchOrbit(point) {
+		if (!point) {
+			clearDragState()
+			return
+		}
+		dragging = true
+		pointerId = point.pointerId
+		dragMode = 'orbit'
+		dragLastArcball = projectArcball(point.clientX, point.clientY)
+	}
+
+	function beginTouchGesture() {
+		const points = [...activeTouchPoints.values()]
+		if (points.length < 2) return
+		const [a, b] = points
+		dragging = true
+		pointerId = null
+		dragMode = 'touch'
+		beginPanBaseline()
+		gestureStartZoom = zoom
+		gestureStartCenterX = (a.clientX + b.clientX) / 2
+		gestureStartCenterY = (a.clientY + b.clientY) / 2
+		gestureStartDistance = Math.max(1, Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY))
+	}
+
+	function updateTouchGesture() {
+		const points = [...activeTouchPoints.values()]
+		if (points.length >= 2) {
+			if (dragMode !== 'touch') beginTouchGesture()
+			const [a, b] = points
+			const centerX = (a.clientX + b.clientX) / 2
+			const centerY = (a.clientY + b.clientY) / 2
+			const totalDx = centerX - gestureStartCenterX
+			const totalDy = centerY - gestureStartCenterY
+			focusX =
+				dragStartFocus[0] +
+				dragStartRight[0] * (-totalDx * dragStartScaleX) +
+				dragStartUp[0] * (totalDy * dragStartScaleY)
+			focusY =
+				dragStartFocus[1] +
+				dragStartRight[1] * (-totalDx * dragStartScaleX) +
+				dragStartUp[1] * (totalDy * dragStartScaleY)
+			focusZ =
+				dragStartFocus[2] +
+				dragStartRight[2] * (-totalDx * dragStartScaleX) +
+				dragStartUp[2] * (totalDy * dragStartScaleY)
+			const currentDistance = Math.max(1, Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY))
+			zoom = clamp((gestureStartZoom * currentDistance) / gestureStartDistance, MIN_ZOOM, MAX_ZOOM)
+			requestDraw()
+			return
+		}
+
+		if (points.length === 1) {
+			const point = points[0]
+			if (dragMode !== 'orbit' || pointerId !== point.pointerId) {
+				beginTouchOrbit(point)
+			} else {
+				const currentArcball = projectArcball(point.clientX, point.clientY)
+				const delta = quatFromUnitVectors(dragLastArcball, currentArcball)
+				rotation = quatNormalize(quatMultiply(delta, rotation))
+				dragLastArcball = currentArcball
+				requestDraw()
+			}
+			return
+		}
+
+		clearDragState()
 	}
 
 	function projectArcball(clientX, clientY) {
@@ -449,9 +592,11 @@ export default function RealtimePreview({ mesh, loading, error, theme }) {
 	}
 
 	watch(() => {
-		meshSig.value
+		const mesh = meshSig.value
+		const shouldAutoFit = !hasAutoFit && !!mesh?.indices?.length
 		queueMicrotask(() => {
-			if (gl) uploadMesh(meshSig.value)
+			if (gl) uploadMesh(mesh)
+			if (shouldAutoFit) fitView({ resetRotation: true })
 			updateCanvasSize()
 			requestDraw()
 		})
@@ -529,23 +674,41 @@ export default function RealtimePreview({ mesh, loading, error, theme }) {
 					$ref={attachCanvas}
 					on:contextmenu={(event) => event.preventDefault()}
 					on:pointerdown={(event) => {
+						showHint.value = false
+						if (event.pointerType === 'touch') {
+							event.preventDefault()
+							activeTouchPoints.set(event.pointerId, {
+								pointerId: event.pointerId,
+								clientX: event.clientX,
+								clientY: event.clientY
+							})
+							canvasEl?.setPointerCapture?.(event.pointerId)
+							updateTouchGesture()
+							return
+						}
+
 						dragging = true
 						pointerId = event.pointerId
 						dragMode = event.button === 1 || event.button === 2 || event.shiftKey ? 'pan' : 'orbit'
 						dragStartX = event.clientX
 						dragStartY = event.clientY
-						dragStartFocus = [focusX, focusY, focusZ]
+						beginPanBaseline()
 						dragLastArcball = projectArcball(event.clientX, event.clientY)
-						dragStartScaleX = panScaleX
-						dragStartScaleY = panScaleY
-						const basis = getPanBasis()
-						dragStartRight = basis.right
-						dragStartUp = basis.up
-						showHint.value = false
 						if (canvasEl) canvasEl.style.cursor = dragMode === 'pan' ? 'move' : 'grabbing'
 						canvasEl?.setPointerCapture?.(event.pointerId)
 					}}
 					on:pointermove={(event) => {
+						if (event.pointerType === 'touch') {
+							if (!activeTouchPoints.has(event.pointerId)) return
+							activeTouchPoints.set(event.pointerId, {
+								pointerId: event.pointerId,
+								clientX: event.clientX,
+								clientY: event.clientY
+							})
+							updateTouchGesture()
+							return
+						}
+
 						if (!dragging || event.pointerId !== pointerId) return
 
 						if (dragMode === 'pan') {
@@ -573,29 +736,44 @@ export default function RealtimePreview({ mesh, loading, error, theme }) {
 						requestDraw()
 					}}
 					on:pointerup={(event) => {
+						if (event.pointerType === 'touch') {
+							activeTouchPoints.delete(event.pointerId)
+							canvasEl?.releasePointerCapture?.(event.pointerId)
+							updateTouchGesture()
+							return
+						}
+
 						if (event.pointerId !== pointerId) return
-						dragging = false
-						pointerId = null
-						if (canvasEl) canvasEl.style.cursor = 'grab'
+						clearDragState()
+						canvasEl?.releasePointerCapture?.(event.pointerId)
+					}}
+					on:pointerleave={(event) => {
+						if (event.pointerType === 'touch' || !dragging || event.pointerId !== pointerId) return
+						clearDragState()
 						canvasEl?.releasePointerCapture?.(event.pointerId)
 					}}
 					on:pointercancel={(event) => {
+						if (event.pointerType === 'touch') {
+							activeTouchPoints.delete(event.pointerId)
+							canvasEl?.releasePointerCapture?.(event.pointerId)
+							updateTouchGesture()
+							return
+						}
+
 						if (event.pointerId !== pointerId) return
-						dragging = false
-						pointerId = null
-						if (canvasEl) canvasEl.style.cursor = 'grab'
+						clearDragState()
 						canvasEl?.releasePointerCapture?.(event.pointerId)
 					}}
 					on:wheel={(event) => {
 						event.preventDefault()
 						showHint.value = false
-						zoom = clamp(zoom * Math.exp(-event.deltaY * 0.001), 0.35, 4.5)
+						zoom = clamp(zoom * Math.exp(-event.deltaY * 0.001), MIN_ZOOM, MAX_ZOOM)
 						requestDraw()
 					}}
 				/>
 			</div>
 
-			<div class={hintClass}>Drag to orbit. Shift-drag or right-drag to pan. Wheel to zoom.</div>
+			<div class={hintClass}>Drag to orbit. Two fingers pan and zoom. Shift-drag or right-drag also pans.</div>
 		</div>
 	)
 }

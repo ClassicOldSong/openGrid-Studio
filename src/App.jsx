@@ -33,6 +33,8 @@ const MEASUREMENT_MIN = 0;
 const POSITIVE_MEASUREMENT_MIN = 0.1;
 const SEGMENTS_MIN = 3;
 const COUNTERSINK_DEGREE_MIN = 1;
+const MOBILE_LAYOUT_BREAKPOINT = 1200;
+const MOBILE_LAYOUT_MEDIA_QUERY = `(max-width: ${MOBILE_LAYOUT_BREAKPOINT - 1}px)`;
 const DEFAULT_CONFIG = {
 	themeMode: "auto",
 	exportFormat: "stl-binary",
@@ -753,6 +755,10 @@ export default function App() {
 
 	const showModal = signal(false);
 	const showAboutModal = signal(false);
+	const layoutMedia = window.matchMedia(MOBILE_LAYOUT_MEDIA_QUERY);
+	const isMobileLayout = signal(layoutMedia.matches);
+	const isDesktopLayout = $(() => !isMobileLayout.value);
+	const mobileConfigPanelOpen = signal(false);
 	let persistConfig = true;
 	const exportWorker = new Worker(
 		new URL("./export-worker.js", import.meta.url),
@@ -874,20 +880,19 @@ export default function App() {
 		maskGrid: maskGrid.value,
 	});
 
-	if (typeof window !== "undefined" && window.matchMedia) {
-		const media = window.matchMedia("(prefers-color-scheme: dark)");
-		systemPrefersDark.value = media.matches;
-		const onChange = (event) => {
-			systemPrefersDark.value = event.matches;
-		};
-		if (media.addEventListener) media.addEventListener("change", onChange);
-		else media.addListener(onChange);
-		onDispose(() => {
-			if (media.removeEventListener)
-				media.removeEventListener("change", onChange);
-			else media.removeListener(onChange);
-		});
-	}
+	const themeMedia = window.matchMedia("(prefers-color-scheme: dark)");
+	systemPrefersDark.value = themeMedia.matches;
+	const onThemeChange = (event) => {
+		systemPrefersDark.value = event.matches;
+	};
+	if (themeMedia.addEventListener)
+		themeMedia.addEventListener("change", onThemeChange);
+	else themeMedia.addListener(onThemeChange);
+	onDispose(() => {
+		if (themeMedia.removeEventListener)
+			themeMedia.removeEventListener("change", onThemeChange);
+		else themeMedia.removeListener(onThemeChange);
+	});
 
 	onDispose(() => {
 		for (const pending of pendingWorkerRequests.values())
@@ -927,11 +932,9 @@ export default function App() {
 	});
 
 	watch(() => {
-		if (typeof document !== "undefined") {
-			const isDark = resolvedTheme.value === "dark";
-			document.documentElement.classList.toggle("dark", isDark);
-			document.documentElement.style.colorScheme = resolvedTheme.value;
-		}
+		const isDark = resolvedTheme.value === "dark";
+		document.documentElement.classList.toggle("dark", isDark);
+		document.documentElement.style.colorScheme = resolvedTheme.value;
 	});
 
 	const topo = $(() =>
@@ -1100,6 +1103,25 @@ export default function App() {
 		event?.currentTarget?.closest("details")?.removeAttribute("open");
 	};
 
+	const openCopyScadFromMenu = (event) => {
+		event?.currentTarget?.closest("details")?.removeAttribute("open");
+		copy();
+	};
+
+	const closeExportMenus = () => {
+		for (const element of document.querySelectorAll(".js-export-menu[open]")) {
+			element.removeAttribute("open");
+		}
+	};
+
+	const openConfigPanel = () => {
+		mobileConfigPanelOpen.value = true;
+	};
+
+	const closeConfigPanel = () => {
+		mobileConfigPanelOpen.value = false;
+	};
+
 	const clearConfiguration = () => {
 		persistConfig = false;
 		localStorage.removeItem(STORAGE_KEY);
@@ -1171,8 +1193,6 @@ export default function App() {
 		"bg-gray-100 text-gray-600 rounded-lg py-1.5 px-3 text-[10px] font-bold uppercase hover:bg-gray-200 transition tracking-tight dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700";
 	const iconButtonClass =
 		"w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-gray-700 font-bold text-xs transition dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700";
-	const secondaryButtonClass =
-		"bg-white border border-gray-200 text-gray-700 rounded-xl h-10 px-4 text-sm font-bold hover:border-gray-300 transition flex items-center gap-2 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600";
 	const aboutButtonClass =
 		"h-10 pr-2 text-sm font-bold text-gray-500 hover:text-gray-700 transition flex items-center dark:text-slate-400 dark:hover:text-slate-200";
 	const primaryButtonClass =
@@ -1183,6 +1203,8 @@ export default function App() {
 		"bg-blue-600 text-white rounded-xl px-4 h-11 font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-600/20 dark:bg-blue-500 dark:hover:bg-blue-400";
 	const themeBarClass =
 		"inline-flex rounded-xl border border-gray-200 bg-gray-100 p-1 h-10 dark:border-slate-700 dark:bg-slate-900";
+	const mobileThemeBarClass =
+		"grid h-auto grid-cols-3 rounded-xl border border-gray-200 bg-gray-100 p-1 dark:border-slate-700 dark:bg-slate-900";
 	const themeOptionClass = (mode) =>
 		$(() => {
 			const active = themeMode.value === mode;
@@ -1223,6 +1245,8 @@ export default function App() {
 	);
 	const exportMenuClass =
 		"absolute right-0 top-full z-30 mt-2 min-w-40 rounded-xl border border-gray-200 bg-white p-1 shadow-[0_12px_30px_rgba(15,23,42,0.14)] dark:border-slate-700 dark:bg-slate-900";
+	const exportMenuAboveClass =
+		"absolute bottom-full right-0 z-30 mb-2 min-w-40 rounded-xl border border-gray-200 bg-white p-1 shadow-[0_12px_30px_rgba(15,23,42,0.14)] dark:border-slate-700 dark:bg-slate-900";
 	const exportMenuItemClass = (format) =>
 		$(() =>
 			[
@@ -1281,6 +1305,35 @@ export default function App() {
 		cancelPreviewRender(false);
 	});
 
+	const syncLayoutMode = (matches) => {
+		const nextIsMobile = matches;
+		const previousIsMobile = isMobileLayout.value;
+		isMobileLayout.value = nextIsMobile;
+		if (nextIsMobile !== previousIsMobile) {
+			mobileConfigPanelOpen.value = false;
+		}
+	};
+	const onLayoutChange = (event) => {
+		syncLayoutMode(event.matches);
+	};
+
+	syncLayoutMode(layoutMedia.matches);
+	if (layoutMedia.addEventListener)
+		layoutMedia.addEventListener("change", onLayoutChange);
+	else layoutMedia.addListener(onLayoutChange);
+	onDispose(() => {
+		if (layoutMedia.removeEventListener)
+			layoutMedia.removeEventListener("change", onLayoutChange);
+		else layoutMedia.removeListener(onLayoutChange);
+	});
+
+	const onPointerDown = (event) => {
+		if (event.target?.closest?.(".js-export-menu")) return;
+		closeExportMenus();
+	};
+	document.addEventListener("pointerdown", onPointerDown);
+	onDispose(() => document.removeEventListener("pointerdown", onPointerDown));
+
 	const ResizeButtons = ({ onPlus, onMinus, vertical }) => (
 		<div
 			class={
@@ -1298,18 +1351,201 @@ export default function App() {
 		</div>
 	);
 
+	const configPanelClass = $(() => {
+		const mobile = isMobileLayout.value;
+		const drawerOpen = mobileConfigPanelOpen.value;
+		return [
+			"bg-gray-50 border-gray-200 flex flex-col z-40 dark:bg-slate-950 dark:border-slate-800",
+			mobile
+				? [
+						"fixed inset-y-0 left-0 w-[min(92vw,400px)] max-w-full border-r shadow-[0_24px_80px_rgba(15,23,42,0.28)] transition-transform duration-200 ease-out",
+						drawerOpen ? "translate-x-0" : "-translate-x-full",
+					].join(" ")
+				: "w-[400px] min-w-[400px] shrink-0 h-full overflow-auto border-r",
+		].join(" ");
+	});
+	const configPanelBodyClass = $(() =>
+		[
+			"h-full overflow-auto flex flex-col gap-8",
+			isMobileLayout.value ? "p-5" : "p-8",
+		].join(" "),
+	);
+	const showMobileConfigOverlay = $(() => {
+		const mobile = isMobileLayout.value;
+		const drawerOpen = mobileConfigPanelOpen.value;
+		return mobile && drawerOpen;
+	});
+	const appShellClass = $(() =>
+		[
+			"h-screen flex overflow-hidden font-sans bg-white text-gray-900 dark:bg-slate-950 dark:text-slate-100",
+			isMobileLayout.value ? "flex-col" : "flex-row",
+		].join(" "),
+	);
+
+	const ThemeSwitcher = ({ mobile = false }) => (
+		<div class={mobile ? `grid gap-3 ${sectionClass}` : "inline-flex"}>
+			<If condition={() => mobile}>
+				{() => <div class={sectionTitleClass}>Appearance</div>}
+			</If>
+			<div class={mobile ? mobileThemeBarClass : themeBarClass}>
+				<button
+					class={
+						mobile
+							? $(() => `${themeOptionClass("auto").value} w-full justify-center`)
+							: themeOptionClass("auto")
+					}
+					on:click={() => (themeMode.value = "auto")}
+				>
+					Auto
+				</button>
+				<button
+					class={
+						mobile
+							? $(() =>
+									`${themeOptionClass("light").value} w-full justify-center`,
+							  )
+							: themeOptionClass("light")
+					}
+					on:click={() => (themeMode.value = "light")}
+				>
+					Light
+				</button>
+				<button
+					class={
+						mobile
+							? $(() => `${themeOptionClass("dark").value} w-full justify-center`)
+							: themeOptionClass("dark")
+					}
+					on:click={() => (themeMode.value = "dark")}
+				>
+					Dark
+				</button>
+			</div>
+		</div>
+	);
+
+	const DownloadActions = ({ mobile = false }) => (
+		<div
+			class={
+				mobile
+					? "fixed bottom-4 right-4 z-20 flex items-stretch"
+					: "relative flex items-stretch"
+			}
+		>
+			<button
+				class={exportButtonClass}
+				on:click={downloadExport}
+				prop:disabled={exportInFlight}
+			>
+				{$(() =>
+					exportInFlight.value
+						? `Rendering ${exportFormatLabel.value}...`
+						: `Download ${exportFormatLabel.value}`,
+				)}
+			</button>
+			<details class="js-export-menu relative">
+				<summary
+					class={exportDropdownButtonClass}
+					style="list-style: none;"
+				>
+					<svg
+						aria-hidden="true"
+						viewBox="0 0 16 16"
+						class="h-4 w-4 fill-current"
+					>
+						<path d="M4.22 6.97a.75.75 0 0 1 1.06 0L8 9.69l2.72-2.72a.75.75 0 1 1 1.06 1.06L8.53 11.28a.75.75 0 0 1-1.06 0L4.22 8.03a.75.75 0 0 1 0-1.06Z" />
+					</svg>
+				</summary>
+				<div class={mobile ? exportMenuAboveClass : exportMenuClass}>
+					<button
+						class={exportMenuItemClass("__copy_scad__")}
+						on:click={openCopyScadFromMenu}
+					>
+						Copy SCAD
+					</button>
+					{EXPORT_FORMAT_OPTIONS.map((option) => (
+						<button
+							class={exportMenuItemClass(option.value)}
+							on:click={(event) => chooseExportFormat(option.value, event)}
+						>
+							{option.label}
+						</button>
+					))}
+				</div>
+			</details>
+		</div>
+	);
+
+	const PreviewModeSwitcher = ({ mobile = false }) => (
+		<div
+			class={
+				mobile
+					? "pointer-events-auto absolute bottom-4 left-4 z-20"
+					: "block"
+			}
+		>
+			<div class={previewBarClass}>
+				<button
+					class={previewOptionClass("2d")}
+					on:click={() => (previewMode.value = "2d")}
+				>
+					2D
+				</button>
+				<button
+					class={previewOptionClass("3d")}
+					on:click={() => (previewMode.value = "3d")}
+				>
+					3D
+				</button>
+			</div>
+		</div>
+	);
+
 	return (
-		<div class="h-screen flex overflow-hidden font-sans bg-white text-gray-900 dark:bg-slate-950 dark:text-slate-100">
+		<div class={appShellClass}>
+			<If condition={showMobileConfigOverlay}>
+				{() => (
+					<div
+						class="fixed inset-0 z-30 bg-slate-950/45 backdrop-blur-[1px]"
+						on:click={closeConfigPanel}
+					></div>
+				)}
+			</If>
 			{/* Left: Config */}
-			<div class="w-[400px] min-w-[400px] shrink-0 h-full overflow-auto bg-gray-50 border-r border-gray-200 flex flex-col z-10 dark:bg-slate-950 dark:border-slate-800">
-				<div class="p-8 flex flex-col gap-8">
+			<div class={configPanelClass}>
+				<div class={configPanelBodyClass}>
 					<div>
-						<h2 class="text-xl font-bold text-gray-900 dark:text-slate-100 mb-6 flex items-center gap-2">
-							<div class="w-2 h-6 bg-blue-600 dark:bg-blue-400 rounded-full"></div>
-							Configuration
-						</h2>
+						<div class="mb-4 sm:mb-6 flex items-center justify-between gap-3">
+							<h2 class="text-lg sm:text-xl font-bold text-gray-900 dark:text-slate-100 flex items-center gap-2">
+								<div class="w-2 h-5 sm:h-6 bg-blue-600 dark:bg-blue-400 rounded-full"></div>
+								Configuration
+							</h2>
+							<If condition={isMobileLayout}>
+								{() => (
+									<button
+										class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+										on:click={closeConfigPanel}
+										aria-label="Close configuration"
+									>
+										<svg
+											aria-hidden="true"
+											viewBox="0 0 20 20"
+											class="h-5 w-5 fill-none stroke-current"
+											stroke-width="1.8"
+											stroke-linecap="round"
+										>
+											<path d="M5.5 5.5l9 9" />
+											<path d="M14.5 5.5l-9 9" />
+										</svg>
+									</button>
+								)}
+							</If>
+						</div>
 
 						<div class="grid gap-6">
+							<If condition={isMobileLayout}>
+								{() => <ThemeSwitcher mobile />}
+							</If>
 							<div class="grid gap-4">
 								<div class={sectionTitleClass}>Shape Helpers</div>
 								<div class="grid grid-cols-2 gap-3">
@@ -1794,105 +2030,61 @@ export default function App() {
 			{/* Right: Preview Area */}
 			<div class="flex-1 min-w-0 flex flex-col h-full bg-white relative dark:bg-slate-950">
 				{/* Title Bar */}
-				<div class="h-16 border-b border-gray-200 flex items-center justify-between px-8 bg-white z-20 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-					<div class="flex items-center gap-4">
-						<img
-							src="/logo.png"
-							alt="openGrid Studio logo"
-							class="h-8 w-8 rounded-lg object-contain shadow-lg shadow-blue-500/20"
-						/>
-						<h1 class="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-slate-400">
-							openGrid Studio
-						</h1>
-						<button
-							class={aboutButtonClass}
-							on:click={() => (showAboutModal.value = true)}
-						>
-							ⓘ
-						</button>
-						<div class={previewBarClass}>
-							<button
-								class={previewOptionClass("2d")}
-								on:click={() => (previewMode.value = "2d")}
-							>
-								2D
-							</button>
-							<button
-								class={previewOptionClass("3d")}
-								on:click={() => (previewMode.value = "3d")}
-							>
-								3D
-							</button>
-						</div>
-					</div>
-					<div class="flex gap-2 items-center">
-						<div class={themeBarClass}>
-							<button
-								class={themeOptionClass("auto")}
-								on:click={() => (themeMode.value = "auto")}
-							>
-								Auto
-							</button>
-							<button
-								class={themeOptionClass("light")}
-								on:click={() => (themeMode.value = "light")}
-							>
-								Light
-							</button>
-							<button
-								class={themeOptionClass("dark")}
-								on:click={() => (themeMode.value = "dark")}
-							>
-								Dark
-							</button>
-						</div>
-						<button class={secondaryButtonClass} on:click={copy}>
-							Copy SCAD
-						</button>
-						<div class="relative flex items-stretch">
-							<button
-								class={exportButtonClass}
-								on:click={downloadExport}
-								prop:disabled={exportInFlight}
-							>
-								{$(() =>
-									exportInFlight.value
-										? `Rendering ${exportFormatLabel.value}...`
-										: `Download ${exportFormatLabel.value}`,
-								)}
-							</button>
-							<details class="relative">
-								<summary
-									class={exportDropdownButtonClass}
-									style="list-style: none;"
-								>
-									<svg
-										aria-hidden="true"
-										viewBox="0 0 16 16"
-										class="h-4 w-4 fill-current"
+				<div class="border-b border-gray-200 bg-white z-20 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+					<div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 sm:gap-3 sm:px-6 sm:py-3 lg:px-8">
+						<div class="flex min-w-0 flex-wrap items-center gap-2 sm:gap-4">
+							<If condition={isMobileLayout}>
+								{() => (
+									<button
+										class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+										on:click={openConfigPanel}
+										aria-label="Open configuration"
 									>
-										<path d="M4.22 6.97a.75.75 0 0 1 1.06 0L8 9.69l2.72-2.72a.75.75 0 1 1 1.06 1.06L8.53 11.28a.75.75 0 0 1-1.06 0L4.22 8.03a.75.75 0 0 1 0-1.06Z" />
-									</svg>
-								</summary>
-								<div class={exportMenuClass}>
-									{EXPORT_FORMAT_OPTIONS.map((option) => (
-										<button
-											class={exportMenuItemClass(option.value)}
-											on:click={(event) =>
-												chooseExportFormat(option.value, event)
-											}
+										<svg
+											aria-hidden="true"
+											viewBox="0 0 20 20"
+											class="h-5 w-5 fill-none stroke-current"
+											stroke-width="1.8"
+											stroke-linecap="round"
 										>
-											{option.label}
-										</button>
-									))}
-								</div>
-							</details>
+											<path d="M3.5 5.5h13" />
+											<path d="M3.5 10h13" />
+											<path d="M3.5 14.5h13" />
+										</svg>
+									</button>
+								)}
+							</If>
+							<img
+								src="/logo.png"
+								alt="openGrid Studio logo"
+								class="h-7 w-7 rounded-lg object-contain shadow-lg shadow-blue-500/20 sm:h-8 sm:w-8"
+							/>
+							<h1 class="text-sm sm:text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-slate-400">
+								openGrid Studio
+							</h1>
+							<button
+								class={aboutButtonClass}
+								on:click={() => (showAboutModal.value = true)}
+							>
+								ⓘ
+							</button>
+							<If condition={isDesktopLayout}>
+								{() => <PreviewModeSwitcher />}
+							</If>
 						</div>
+						<If condition={isDesktopLayout}>
+							{() => (
+								<div class="flex w-full flex-wrap gap-2 items-center sm:w-auto sm:justify-end">
+									<ThemeSwitcher />
+									<DownloadActions />
+								</div>
+							)}
+						</If>
 					</div>
 				</div>
 				<If condition={exportError}>
 					{() => (
-						<div class="px-8 py-3 border-b border-rose-200 bg-rose-50 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+						<div class="px-4 sm:px-6 lg:px-8 py-3 border-b border-rose-200 bg-rose-50 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
 							{exportError}
 						</div>
 					)}
@@ -1901,7 +2093,7 @@ export default function App() {
 				{/* Editor Surface */}
 				<If condition={previewMode.eq("2d")}>
 					{() => (
-						<div class="flex-1 overflow-x-auto overflow-y-auto p-12 flex bg-gray-50/50 relative scrollbar-hide dark:bg-slate-900/40">
+						<div class="flex-1 overflow-x-auto overflow-y-auto p-4 sm:p-8 lg:p-12 flex bg-gray-50/50 relative scrollbar-hide dark:bg-slate-900/40">
 							<div class="flex min-w-max min-h-full flex-col items-center justify-center gap-8 m-auto">
 								<div class="flex min-w-max min-h-full flex-col items-center justify-center gap-6">
 									<ResizeButtons
@@ -2078,6 +2270,12 @@ export default function App() {
 							/>
 						</div>
 					)}
+				</If>
+				<If condition={isMobileLayout}>
+					{() => <PreviewModeSwitcher mobile />}
+				</If>
+				<If condition={isMobileLayout}>
+					{() => <DownloadActions mobile />}
 				</If>
 			</div>
 
