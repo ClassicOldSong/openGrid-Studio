@@ -1,5 +1,21 @@
-import { signal, $, watch, onDispose, For, If, read, nextTick } from "refui";
-import RealtimePreview from "./RealtimePreview.jsx";
+import { signal, $, watch, onDispose, If, nextTick } from "refui";
+import ConfigPanel from "./components/ConfigPanel.jsx";
+import PreviewPane from "./components/PreviewPane.jsx";
+import { CopyScadModal, AboutModal } from "./components/AppModals.jsx";
+import {
+	MOBILE_FLOATING_LEFT_STYLE,
+	MOBILE_FLOATING_RIGHT_STYLE,
+	createAppShellClass,
+	createConfigPanelBodyClass,
+	createConfigPanelClass,
+	createEditor2DViewportClass,
+	createEditor2DViewportStyle,
+	createExportButtonClass,
+	createExportDropdownButtonClass,
+	createExportMenuItemClass,
+	createPreviewOptionClass,
+	createThemeOptionClass,
+} from "./ui-styles.js";
 
 // --- Constants & Pure Utils ---
 
@@ -38,7 +54,6 @@ const MOBILE_LAYOUT_MEDIA_QUERY = `(max-width: ${MOBILE_LAYOUT_BREAKPOINT - 1}px
 const EDITOR_2D_MIN_ZOOM = 0.35;
 const EDITOR_2D_MAX_ZOOM = 5;
 const EDITOR_2D_DRAG_THRESHOLD = 6;
-const EDITOR_2D_RESIZE_BUTTON_RADIUS = 12;
 const EDITOR_2D_RESIZE_BUTTON_OFFSET = 20;
 const EDITOR_2D_INITIAL_MAX_TILE_PX = 88;
 const DEFAULT_CONFIG = {
@@ -526,204 +541,6 @@ function resizeMask(
 	return enableOuterCornerChamfers(nextGrid, nextW, nextH);
 }
 
-// --- Components ---
-
-const OuterCornerGlyph = ({
-	dir,
-	x,
-	y,
-	chamfer,
-	outerFill = "#000",
-	innerFill = "#fff",
-}) => {
-	const outer = 13;
-	const inner = 6.4;
-
-	const isChamfer = $(() => read(chamfer));
-	const direction = $(() => read(dir));
-
-	return (
-		<g>
-			<If condition={$(() => direction.value === "tl")}>
-				{() => (
-					<g>
-						<polygon
-							attr:points={`${x},${y} ${x + outer},${y} ${x},${y + outer}`}
-							attr:fill={outerFill}
-						/>
-						<If condition={isChamfer}>
-							{() => (
-								<polygon
-									attr:points={`${x},${y} ${x + inner},${y} ${x},${y + inner}`}
-									attr:fill={innerFill}
-								/>
-							)}
-						</If>
-					</g>
-				)}
-			</If>
-			<If condition={$(() => direction.value === "tr")}>
-				{() => (
-					<g>
-						<polygon
-							attr:points={`${x},${y} ${x - outer},${y} ${x},${y + outer}`}
-							attr:fill={outerFill}
-						/>
-						<If condition={isChamfer}>
-							{() => (
-								<polygon
-									attr:points={`${x},${y} ${x - inner},${y} ${x},${y + inner}`}
-									attr:fill={innerFill}
-								/>
-							)}
-						</If>
-					</g>
-				)}
-			</If>
-			<If condition={$(() => direction.value === "bl")}>
-				{() => (
-					<g>
-						<polygon
-							attr:points={`${x},${y} ${x + outer},${y} ${x},${y - outer}`}
-							attr:fill={outerFill}
-						/>
-						<If condition={isChamfer}>
-							{() => (
-								<polygon
-									attr:points={`${x},${y} ${x + inner},${y} ${x},${y - inner}`}
-									attr:fill={innerFill}
-								/>
-							)}
-						</If>
-					</g>
-				)}
-			</If>
-			<If condition={$(() => direction.value === "br")}>
-				{() => (
-					<g>
-						<polygon
-							attr:points={`${x},${y} ${x - outer},${y} ${x},${y - outer}`}
-							attr:fill={outerFill}
-						/>
-						<If condition={isChamfer}>
-							{() => (
-								<polygon
-									attr:points={`${x},${y} ${x - inner},${y} ${x},${y - inner}`}
-									attr:fill={innerFill}
-								/>
-							)}
-						</If>
-					</g>
-				)}
-			</If>
-		</g>
-	);
-};
-
-const EdgeGlyph = ({ state, x, y, dir, outerFill = "#000", innerFill = "#fff" }) => {
-	const outer = 13;
-	const inner = 6.4;
-	const hole = 5.0;
-
-	const direction = dir;
-	const currentState = state;
-
-	const points = $(() => {
-		const d = direction.value;
-		if (d === "up")
-			return `${x - outer},${y} ${x + outer},${y} ${x},${y - outer}`;
-		if (d === "down")
-			return `${x - outer},${y} ${x + outer},${y} ${x},${y + outer}`;
-		if (d === "left")
-			return `${x},${y - outer} ${x},${y + outer} ${x - outer},${y}`;
-		if (d === "right")
-			return `${x},${y - outer} ${x},${y + outer} ${x + outer},${y}`;
-		return "";
-	});
-
-	const innerPoints = $(() => {
-		const d = direction.value;
-		if (d === "up")
-			return `${x - inner},${y} ${x + inner},${y} ${x},${y - inner}`;
-		if (d === "down")
-			return `${x - inner},${y} ${x + inner},${y} ${x},${y + inner}`;
-		if (d === "left")
-			return `${x},${y - inner} ${x},${y + inner} ${x - inner},${y}`;
-		if (d === "right")
-			return `${x},${y - inner} ${x},${y + inner} ${x + inner},${y}`;
-		return "";
-	});
-
-	return (
-		<g>
-			<polygon attr:points={points} attr:fill={outerFill} />
-			<If condition={() => currentState.value === "chamfer"}>
-				{() => <polygon attr:points={innerPoints} attr:fill={innerFill} />}
-			</If>
-			<If condition={() => currentState.value === "hole"}>
-				{() => (
-					<circle attr:cx={x} attr:cy={y} attr:r={hole} attr:fill={innerFill} />
-				)}
-			</If>
-		</g>
-	);
-};
-
-const CenterGlyph = ({ state, x, y, outerFill = "#000", innerFill = "#fff" }) => {
-	const outer = 13;
-	const inner = 6.4;
-	const hole = 5.0;
-
-	const currentState = state;
-
-	return (
-		<g>
-			<polygon attr:points={diamondPoints(x, y, outer)} attr:fill={outerFill} />
-			<If condition={() => currentState.value === "chamfer"}>
-				{() => (
-					<polygon attr:points={diamondPoints(x, y, inner)} attr:fill={innerFill} />
-				)}
-			</If>
-			<If condition={() => currentState.value === "hole"}>
-				{() => (
-					<circle attr:cx={x} attr:cy={y} attr:r={hole} attr:fill={innerFill} />
-				)}
-			</If>
-		</g>
-	);
-};
-
-const NodeGlyph = ({
-	kind,
-	state,
-	x,
-	y,
-	dir,
-	outerFill = "#000",
-	innerFill = "#fff",
-}) => {
-	const k = $(() => read(kind));
-	const currentState = $(() => read(state));
-	const visible = $(() =>
-		["outer", "edge", "inner", "full", "diag"].includes(k.value),
-	);
-	return (
-		<g>
-			<If condition={visible}>
-				{() => (
-					<CenterGlyph
-						state={currentState}
-						x={x}
-						y={y}
-						outerFill={outerFill}
-						innerFill={innerFill}
-					/>
-				)}
-			</If>
-		</g>
-	);
-};
-
 export default function App() {
 	const themeMode = signal(DEFAULT_CONFIG.themeMode);
 	const previewMode = signal("2d");
@@ -1144,51 +961,6 @@ export default function App() {
 		}
 		return { type };
 	};
-
-	const Editor2DResizeButton = ({ cx, cy, label, action }) => (
-		(() => {
-			const x = $(() => read(cx));
-			const y = $(() => read(cy));
-			return (
-				<g
-					attr:data-editor-action={action}
-					style="cursor: pointer;"
-				>
-					<circle
-						attr:cx={x}
-						attr:cy={y}
-						attr:r={EDITOR_2D_RESIZE_BUTTON_RADIUS}
-						attr:fill={editor2DResizeButtonFill}
-						attr:stroke={editor2DResizeButtonStroke}
-						attr:stroke-width="1.5"
-					/>
-					<g
-						attr:stroke={editor2DResizeButtonText}
-						attr:stroke-width="1.8"
-						attr:stroke-linecap="round"
-						style="pointer-events: none; user-select: none;"
-					>
-						<line
-							attr:x1={$(() => x.value - 4.5)}
-							attr:y1={y}
-							attr:x2={$(() => x.value + 4.5)}
-							attr:y2={y}
-						/>
-						<If condition={label === "+"}>
-							{() => (
-								<line
-									attr:x1={x}
-									attr:y1={$(() => y.value - 4.5)}
-									attr:x2={x}
-									attr:y2={$(() => y.value + 4.5)}
-								/>
-							)}
-						</If>
-					</g>
-				</g>
-			);
-		})()
-	);
 
 	const copy = async () => {
 		try {
@@ -1629,101 +1401,19 @@ export default function App() {
 		return parts.join(" ");
 	});
 
-	const inputClass =
-		"border border-gray-200 rounded-lg h-9 px-3 text-sm text-gray-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-400/20";
-	const compactInputClass =
-		"border border-gray-200 rounded-lg h-8 px-2 text-xs text-gray-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none bg-white transition w-full dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-400/20";
-	const sectionClass =
-		"grid gap-4 border-t border-gray-200 pt-6 dark:border-slate-800";
-	const sectionTitleClass =
-		"text-[10px] font-bold uppercase tracking-widest text-blue-600/70 dark:text-blue-300/80";
-	const fieldLabelClass =
-		"text-[10px] font-bold text-gray-400 uppercase tracking-tighter dark:text-slate-500";
-	const formLabelClass =
-		"text-xs font-medium text-gray-500 dark:text-slate-400";
-	const toggleLabelClass =
-		"flex items-center gap-2 text-sm font-medium text-gray-600 cursor-pointer dark:text-slate-300";
-	const chipButtonClass =
-		"bg-gray-100 text-gray-600 rounded-lg py-1.5 px-3 text-[10px] font-bold uppercase hover:bg-gray-200 transition tracking-tight dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700";
-	const iconButtonClass =
-		"w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-gray-700 font-bold text-xs transition dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700";
-	const aboutButtonClass =
-		"h-10 pr-2 text-sm font-bold text-gray-500 hover:text-gray-700 transition flex items-center dark:text-slate-400 dark:hover:text-slate-200";
-	const primaryButtonClass =
-		"bg-blue-600 text-white rounded-xl h-10 px-4 text-sm font-bold hover:bg-blue-700 transition flex items-center gap-2 shadow-lg shadow-blue-600/20 dark:bg-blue-500 dark:hover:bg-blue-400";
-	const modalActionClass =
-		"bg-gray-100 text-gray-700 rounded-xl px-4 h-11 font-bold hover:bg-gray-200 transition dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700";
-	const modalPrimaryActionClass =
-		"bg-blue-600 text-white rounded-xl px-4 h-11 font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-600/20 dark:bg-blue-500 dark:hover:bg-blue-400";
-	const themeBarClass =
-		"inline-flex rounded-xl border border-gray-200 bg-gray-100 p-1 h-10 dark:border-slate-700 dark:bg-slate-900";
-	const mobileThemeBarClass =
-		"grid h-auto grid-cols-3 rounded-xl border border-gray-200 bg-gray-100 p-1 dark:border-slate-700 dark:bg-slate-900";
-	const themeOptionClass = (mode) =>
-		$(() => {
-			const active = themeMode.value === mode;
-			return [
-				"rounded-lg px-3 h-7.5 text-xs font-bold uppercase tracking-wider transition",
-				active
-					? "bg-white text-gray-900 shadow-sm dark:bg-slate-800 dark:text-slate-100"
-					: "text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200",
-			].join(" ");
-		});
-	const previewBarClass =
-		"inline-flex rounded-xl border border-gray-200 bg-gray-100 p-1 h-10 dark:border-slate-700 dark:bg-slate-900";
+	const themeOptionClass = (mode) => createThemeOptionClass(themeMode, mode);
 	const previewOptionClass = (mode) =>
-		$(() => {
-			const active = previewMode.value === mode;
-			return [
-				"rounded-lg px-3 h-7.5 text-xs font-bold uppercase tracking-wider transition",
-				active
-					? "bg-white text-gray-900 shadow-sm dark:bg-slate-800 dark:text-slate-100"
-					: "text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200",
-			].join(" ");
-		});
+		createPreviewOptionClass(previewMode, mode);
 	const exportFormatLabel = $(
 		() => getExportFormatMeta(exportFormat.value).label,
 	);
-	const exportButtonClass = $(() =>
-		[
-			primaryButtonClass,
-			"rounded-r-none",
-			exportInFlight.value ? "cursor-wait opacity-70" : "",
-		].join(" "),
-	);
-	const exportDropdownButtonClass = $(() =>
-		[
-			"flex items-center justify-center bg-blue-600 text-white rounded-r-xl rounded-l-none h-10 px-2 leading-none hover:bg-blue-700 transition border-l border-blue-500/70 shadow-lg shadow-blue-600/20 dark:bg-blue-500 dark:hover:bg-blue-400 dark:border-blue-400/40",
-			exportInFlight.value ? "cursor-wait opacity-70 pointer-events-none" : "",
-		].join(" "),
-	);
-	const exportMenuClass =
-		"absolute right-0 top-full z-30 mt-2 min-w-40 rounded-xl border border-gray-200 bg-white p-1 shadow-[0_12px_30px_rgba(15,23,42,0.14)] dark:border-slate-700 dark:bg-slate-900";
-	const exportMenuAboveClass =
-		"absolute bottom-full right-0 z-30 mb-2 min-w-40 rounded-xl border border-gray-200 bg-white p-1 shadow-[0_12px_30px_rgba(15,23,42,0.14)] dark:border-slate-700 dark:bg-slate-900";
-	const mobileFloatingBottomStyle =
-		"bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);";
-	const mobileFloatingLeftStyle =
-		`${mobileFloatingBottomStyle} left: calc(env(safe-area-inset-left, 0px) + 1rem);`;
-	const mobileFloatingRightStyle =
-		`${mobileFloatingBottomStyle} right: calc(env(safe-area-inset-right, 0px) + 1rem);`;
-	const mobilePreviewControlsInset =
-		"calc(env(safe-area-inset-bottom, 0px) + 4.75rem)";
-	const editor2DViewportClass = $(() =>
-		isMobileLayout.value ? "absolute inset-x-0 top-0" : "absolute inset-0",
-	);
-	const editor2DViewportStyle = $(() =>
-		isMobileLayout.value ? `bottom: ${mobilePreviewControlsInset};` : undefined,
-	);
+	const exportButtonClass = createExportButtonClass(exportInFlight);
+	const exportDropdownButtonClass =
+		createExportDropdownButtonClass(exportInFlight);
+	const editor2DViewportClass = createEditor2DViewportClass(isMobileLayout);
+	const editor2DViewportStyle = createEditor2DViewportStyle(isMobileLayout);
 	const exportMenuItemClass = (format) =>
-		$(() =>
-			[
-				"flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-semibold transition",
-				exportFormat.value === format
-					? "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"
-					: "text-gray-700 hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800",
-			].join(" "),
-		);
+		createExportMenuItemClass(exportFormat, format);
 
 	let previewTimer = null;
 	let previewSequence = 0;
@@ -1983,157 +1673,166 @@ export default function App() {
 		});
 	};
 
-	const configPanelClass = $(() => {
-		const mobile = isMobileLayout.value;
-		const drawerOpen = mobileConfigPanelOpen.value;
-		return [
-			"bg-gray-50 border-gray-200 flex flex-col z-40 dark:bg-slate-950 dark:border-slate-800",
-			mobile
-				? [
-						"fixed inset-y-0 left-0 w-[min(92vw,400px)] max-w-full border-r shadow-[0_24px_80px_rgba(15,23,42,0.28)] transition-transform duration-200 ease-out",
-						drawerOpen ? "translate-x-0" : "-translate-x-full",
-					].join(" ")
-				: "w-[400px] min-w-[400px] shrink-0 h-full overflow-auto border-r",
-		].join(" ");
-	});
-	const configPanelBodyClass = $(() =>
-		[
-			"h-full overflow-auto flex flex-col gap-8",
-			isMobileLayout.value ? "p-5" : "p-8",
-		].join(" "),
+	const configPanelClass = createConfigPanelClass(
+		isMobileLayout,
+		mobileConfigPanelOpen,
 	);
+	const configPanelBodyClass = createConfigPanelBodyClass(isMobileLayout);
 	const showMobileConfigOverlay = $(() => {
 		const mobile = isMobileLayout.value;
 		const drawerOpen = mobileConfigPanelOpen.value;
 		return mobile && drawerOpen;
 	});
-	const appShellClass = $(() =>
-		[
-			"h-screen [height:100dvh] flex overflow-hidden font-sans bg-white text-gray-900 dark:bg-slate-950 dark:text-slate-100",
-			isMobileLayout.value ? "flex-col" : "flex-row",
-		].join(" "),
-	);
+	const appShellClass = createAppShellClass(isMobileLayout);
 
-	const ThemeSwitcher = ({ mobile = false }) => (
-		<div class={mobile ? `grid gap-3 ${sectionClass}` : "inline-flex"}>
-			<If condition={() => mobile}>
-				{() => <div class={sectionTitleClass}>Appearance</div>}
-			</If>
-			<div class={mobile ? mobileThemeBarClass : themeBarClass}>
-				<button
-					class={
-						mobile
-							? $(() => `${themeOptionClass("auto").value} w-full justify-center`)
-							: themeOptionClass("auto")
-					}
-					on:click={() => (themeMode.value = "auto")}
-				>
-					Auto
-				</button>
-				<button
-					class={
-						mobile
-							? $(() =>
-									`${themeOptionClass("light").value} w-full justify-center`,
-							  )
-							: themeOptionClass("light")
-					}
-					on:click={() => (themeMode.value = "light")}
-				>
-					Light
-				</button>
-				<button
-					class={
-						mobile
-							? $(() => `${themeOptionClass("dark").value} w-full justify-center`)
-							: themeOptionClass("dark")
-					}
-					on:click={() => (themeMode.value = "dark")}
-				>
-					Dark
-				</button>
-			</div>
-		</div>
-	);
-
-	const DownloadActions = ({ mobile = false }) => (
-		<div
-			class={
-				mobile
-					? "fixed z-30 flex items-stretch"
-					: "relative flex items-stretch"
-			}
-			style={mobile ? mobileFloatingRightStyle : undefined}
-		>
-			<button
-				class={exportButtonClass}
-				on:click={downloadExport}
-				prop:disabled={exportInFlight}
-			>
-				{$(() =>
-					exportInFlight.value
-						? `Rendering ${exportFormatLabel.value}...`
-						: `Download ${exportFormatLabel.value}`,
-				)}
-			</button>
-			<details class="js-export-menu relative">
-				<summary
-					class={exportDropdownButtonClass}
-					style="list-style: none;"
-				>
-					<svg
-						aria-hidden="true"
-						viewBox="0 0 16 16"
-						class="h-4 w-4 fill-current"
-					>
-						<path d="M4.22 6.97a.75.75 0 0 1 1.06 0L8 9.69l2.72-2.72a.75.75 0 1 1 1.06 1.06L8.53 11.28a.75.75 0 0 1-1.06 0L4.22 8.03a.75.75 0 0 1 0-1.06Z" />
-					</svg>
-				</summary>
-				<div class={mobile ? exportMenuAboveClass : exportMenuClass}>
-					<button
-						class={exportMenuItemClass("__copy_scad__")}
-						on:click={openCopyScadFromMenu}
-					>
-						Copy SCAD
-					</button>
-					{EXPORT_FORMAT_OPTIONS.map((option) => (
-						<button
-							class={exportMenuItemClass(option.value)}
-							on:click={(event) => chooseExportFormat(option.value, event)}
-						>
-							{option.label}
-						</button>
-					))}
-				</div>
-			</details>
-		</div>
-	);
-
-	const PreviewModeSwitcher = ({ mobile = false }) => (
-		<div
-			class={
-				mobile
-					? "pointer-events-auto fixed z-30"
-					: "block"
-			}
-			style={mobile ? mobileFloatingLeftStyle : undefined}
-		>
-			<div class={previewBarClass}>
-				<button
-					class={previewOptionClass("2d")}
-					on:click={() => (previewMode.value = "2d")}
-				>
-					2D
-				</button>
-				<button
-					class={previewOptionClass("3d")}
-					on:click={() => (previewMode.value = "3d")}
-				>
-					3D
-				</button>
-			</div>
-		</div>
-	);
+	const themeControls = {
+		themeOptionClass,
+		themeMode,
+	};
+	const downloadControls = {
+		mobileFloatingRightStyle: MOBILE_FLOATING_RIGHT_STYLE,
+		exportButtonClass,
+		downloadExport,
+		exportInFlight,
+		exportFormatLabel,
+		exportDropdownButtonClass,
+		exportMenuItemClass,
+		openCopyScadFromMenu,
+		chooseExportFormat,
+		exportFormatOptions: EXPORT_FORMAT_OPTIONS,
+	};
+	const previewModeControls = {
+		mobileFloatingLeftStyle: MOBILE_FLOATING_LEFT_STYLE,
+		previewOptionClass,
+		previewMode,
+	};
+	const configPanelProps = {
+		themeControls,
+		classes: {
+			configPanelClass,
+			configPanelBodyClass,
+		},
+		constants: {
+			BOARD_DIMENSION_MIN,
+			TOP_COLUMN_MIN,
+			STACK_COUNT_MIN,
+			TILE_SIZE_MIN,
+			MEASUREMENT_MIN,
+			POSITIVE_MEASUREMENT_MIN,
+			SEGMENTS_MIN,
+			COUNTERSINK_DEGREE_MIN,
+		},
+		signals: {
+			isMobileLayout,
+			width,
+			height,
+			top1Text,
+			top2Text,
+			fullOrLite,
+			stackCountValue,
+			stackingMethod,
+			interfaceThicknessValue,
+			interfaceSeparationValue,
+			screwDiameterValue,
+			screwHeadDiameterValue,
+			screwHeadInsetValue,
+			screwHeadCountersunkDegreeValue,
+			screwHeadIsCountersunk,
+			backsideScrewHole,
+			backsideScrewHeadDiameterShrinkValue,
+			backsideScrewHeadInsetValue,
+			backsideScrewHeadIsCountersunk,
+			adhesiveBaseThicknessValue,
+			addAdhesiveBase,
+			tileSizeValue,
+			tileThicknessValue,
+			liteTileThicknessValue,
+			heavyTileThicknessValue,
+			heavyTileGapValue,
+			circleSegmentsValue,
+		},
+		actions: {
+			closeConfigPanel,
+			updateSize,
+			clampIntegerInput,
+			clampNumberInput,
+			applyTrapezoid,
+			applyHelper,
+			clearConfiguration,
+		},
+	};
+	const previewPaneProps = {
+		showAboutModal,
+		openConfigPanel,
+		exportError,
+		isMobileLayout,
+		isDesktopLayout,
+		previewMode,
+		previewMesh,
+		previewLoading,
+		previewError,
+		resolvedTheme,
+		editor2D: {
+			editor2DBackgroundStyle,
+			editor2DViewportClass,
+			editor2DViewportStyle,
+			attach2DEditorViewport,
+			on2DEditorPointerDown,
+			on2DEditorPointerMove,
+			on2DEditorPointerFinish,
+			on2DEditorWheel,
+			editor2DSvgViewBox,
+			editor2DSvgPreserveAspectRatio,
+			editor2DSvgWidth,
+			editor2DSvgHeight,
+			editor2DSvgClass,
+			editor2DSvgStyle,
+			editor2DBoardMaterialClipId,
+			editor2DNodeMaskId,
+			editor2DBoardMaterialPath,
+			editor2DActiveTileInsetPath,
+			editor2DNodeOverlayPath,
+			editor2DBoardFill,
+			editor2DSceneTransform,
+			tiles,
+			nodes,
+			toNodeXY,
+			topo,
+			maskGrid,
+			getMask,
+			nodeState,
+			svgW,
+			svgH,
+			pad,
+			tileSize,
+			editor2DResizeButtonFill,
+			editor2DResizeButtonStroke,
+			editor2DResizeButtonText,
+			editor2DTopAddX,
+			editor2DTopRemoveX,
+			editor2DLeftControlX,
+			editor2DLeftAddY,
+			editor2DLeftRemoveY,
+			editor2DRightControlX,
+			editor2DRightAddY,
+			editor2DRightRemoveY,
+			editor2DBottomAddX,
+			editor2DBottomRemoveX,
+			editor2DTopControlY,
+			editor2DBottomControlY,
+			editor2DShowHint,
+			editor2DHintClass,
+		},
+	};
+	const copyModalProps = {
+		showModal,
+		exportText,
+		close: () => (showModal.value = false),
+	};
+	const aboutModalProps = {
+		showAboutModal,
+		close: () => (showAboutModal.value = false),
+	};
 
 	return (
 		<div class={appShellClass}>
@@ -2145,988 +1844,17 @@ export default function App() {
 					></div>
 				)}
 			</If>
-			{/* Left: Config */}
-			<div class={configPanelClass}>
-				<div class={configPanelBodyClass}>
-					<div>
-						<div class="mb-4 sm:mb-6 flex items-center justify-between gap-3">
-							<h2 class="text-lg sm:text-xl font-bold text-gray-900 dark:text-slate-100 flex items-center gap-2">
-								<div class="w-2 h-5 sm:h-6 bg-blue-600 dark:bg-blue-400 rounded-full"></div>
-								Configuration
-							</h2>
-							<If condition={isMobileLayout}>
-								{() => (
-									<button
-										class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-										on:click={closeConfigPanel}
-										aria-label="Close configuration"
-									>
-										<svg
-											aria-hidden="true"
-											viewBox="0 0 20 20"
-											class="h-5 w-5 fill-none stroke-current"
-											stroke-width="1.8"
-											stroke-linecap="round"
-										>
-											<path d="M5.5 5.5l9 9" />
-											<path d="M14.5 5.5l-9 9" />
-										</svg>
-									</button>
-								)}
-							</If>
-						</div>
-
-						<div class="grid gap-6">
-							<If condition={isMobileLayout}>
-								{() => <ThemeSwitcher mobile />}
-							</If>
-							<div class="grid gap-4">
-								<div class={sectionTitleClass}>Shape Helpers</div>
-								<div class="grid grid-cols-2 gap-3">
-									<div class="grid gap-1">
-										<label class={formLabelClass}>Width</label>
-										<input
-											type="number"
-											class={inputClass}
-											min={BOARD_DIMENSION_MIN}
-											value={width}
-											on:input={(e) =>
-												updateSize(
-													clampIntegerInput(
-														e.target.value,
-														BOARD_DIMENSION_MIN,
-														Infinity,
-														width.value,
-													),
-													height.value,
-												)
-											}
-										/>
-									</div>
-									<div class="grid gap-1">
-										<label class={formLabelClass}>Height</label>
-										<input
-											type="number"
-											class={inputClass}
-											min={BOARD_DIMENSION_MIN}
-											value={height}
-											on:input={(e) =>
-												updateSize(
-													width.value,
-													clampIntegerInput(
-														e.target.value,
-														BOARD_DIMENSION_MIN,
-														Infinity,
-														height.value,
-													),
-												)
-											}
-										/>
-									</div>
-									{/*<button class="bg-blue-600 text-white rounded-lg h-9 px-4 text-sm font-semibold hover:bg-blue-700 transition" on:click={applyRectangle}>Rectangle</button>*/}
-								</div>
-								<div class="grid grid-cols-2 gap-3">
-									<div class="grid gap-1">
-										<label class={formLabelClass}>Top col 1</label>
-										<input
-											type="number"
-											class={inputClass}
-											min={TOP_COLUMN_MIN}
-											max={width}
-											value={top1Text}
-											on:input={(e) =>
-												(top1Text.value = String(
-													clampIntegerInput(
-														e.target.value,
-														TOP_COLUMN_MIN,
-														width.value,
-														Number(top1Text.value) || TOP_COLUMN_MIN,
-													),
-												))
-											}
-										/>
-									</div>
-									<div class="grid gap-1">
-										<label class={formLabelClass}>Top col 2</label>
-										<input
-											type="number"
-											class={inputClass}
-											min={TOP_COLUMN_MIN}
-											max={width}
-											value={top2Text}
-											on:input={(e) =>
-												(top2Text.value = String(
-													clampIntegerInput(
-														e.target.value,
-														TOP_COLUMN_MIN,
-														width.value,
-														Number(top2Text.value) || TOP_COLUMN_MIN,
-													),
-												))
-											}
-										/>
-									</div>
-									<button
-										class="bg-blue-600 border border-blue-600 text-white rounded-lg h-9 px-4 text-sm font-semibold hover:bg-blue-700 transition col-span-2 dark:bg-blue-500 dark:border-blue-500 dark:hover:bg-blue-400"
-										on:click={applyTrapezoid}
-									>
-										Apply
-									</button>
-								</div>
-							</div>
-
-							<div class={sectionClass}>
-								<div class={sectionTitleClass}>Presets</div>
-								<div class="flex flex-wrap gap-2">
-									{[
-										{ label: "Screws", mode: "holes_all" },
-										{ label: "Connectors", mode: "connectors_edge" },
-										{ label: "Chamfers", mode: "chamfer_all" },
-										{ label: "Clear", mode: "clear_all" },
-									].map(({ label, mode }) => (
-										<button
-											class={chipButtonClass}
-											on:click={() => applyHelper(mode)}
-										>
-											{label}
-										</button>
-									))}
-								</div>
-							</div>
-
-							<div class={sectionClass}>
-								<div class={sectionTitleClass}>Board Type</div>
-								<div class="flex gap-4">
-									{["Full", "Lite", "Heavy"].map((v) => (
-										<label class="flex items-center gap-2 cursor-pointer group">
-											<input
-												type="radio"
-												class="w-4 h-4 text-blue-600 focus:ring-blue-500/20 border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:focus:ring-blue-400/20"
-												checked={fullOrLite.eq(v)}
-												on:change={() => (fullOrLite.value = v)}
-											/>
-											<span class="text-sm font-medium text-gray-600 group-hover:text-blue-600 transition dark:text-slate-300 dark:group-hover:text-blue-300">
-												{v}
-											</span>
-										</label>
-									))}
-								</div>
-							</div>
-
-							<div class={sectionClass}>
-								<div class={sectionTitleClass}>Stacking</div>
-								<div class="grid grid-cols-2 gap-x-4 gap-y-3">
-									<div class="grid gap-1">
-										<label class={fieldLabelClass}>Stack Count</label>
-										<input
-											type="number"
-											class={compactInputClass}
-											min={STACK_COUNT_MIN}
-											value={stackCountValue}
-											on:input={(e) =>
-												(stackCountValue.value = clampIntegerInput(
-													e.target.value,
-													STACK_COUNT_MIN,
-													Infinity,
-													stackCountValue.value,
-												))
-											}
-										/>
-									</div>
-									<div class="grid gap-1">
-										<label class={fieldLabelClass}>Method</label>
-										<select
-											class={compactInputClass}
-											value={stackingMethod}
-											on:change={(e) => (stackingMethod.value = e.target.value)}
-										>
-											<option value="Interface Layer">Interface Layer</option>
-											<option value="Ironing - BETA">Ironing - BETA</option>
-										</select>
-									</div>
-									<div class="grid gap-1">
-										<label class={fieldLabelClass}>Interface Thickness</label>
-										<input
-											type="number"
-											class={compactInputClass}
-											step={0.1}
-											min={MEASUREMENT_MIN}
-											value={interfaceThicknessValue}
-											on:input={(e) =>
-												(interfaceThicknessValue.value =
-													clampNumberInput(
-														e.target.value,
-														MEASUREMENT_MIN,
-														Infinity,
-														interfaceThicknessValue.value,
-													))
-											}
-										/>
-									</div>
-									<div class="grid gap-1">
-										<label class={fieldLabelClass}>Separation</label>
-										<input
-											type="number"
-											class={compactInputClass}
-											step={0.1}
-											min={MEASUREMENT_MIN}
-											value={interfaceSeparationValue}
-											on:input={(e) =>
-												(interfaceSeparationValue.value =
-													clampNumberInput(
-														e.target.value,
-														MEASUREMENT_MIN,
-														Infinity,
-														interfaceSeparationValue.value,
-													))
-											}
-										/>
-									</div>
-								</div>
-							</div>
-
-							<div class={sectionClass}>
-								<div class={sectionTitleClass}>Screws</div>
-								<div class="grid grid-cols-2 gap-x-4 gap-y-3">
-									{[
-										{
-											label: "Screw Diameter",
-											step: 0.1,
-											sig: screwDiameterValue,
-											min: POSITIVE_MEASUREMENT_MIN,
-										},
-										{
-											label: "Head Diameter",
-											step: 0.1,
-											sig: screwHeadDiameterValue,
-											min: POSITIVE_MEASUREMENT_MIN,
-										},
-										{
-											label: "Head Inset",
-											step: 0.1,
-											sig: screwHeadInsetValue,
-											min: MEASUREMENT_MIN,
-										},
-										{
-											label: "Sink Deg",
-											step: 0.1,
-											sig: screwHeadCountersunkDegreeValue,
-											min: COUNTERSINK_DEGREE_MIN,
-										},
-									].map(({ label, sig, step, min, max }) => (
-										<div class="grid gap-1">
-											<label class={fieldLabelClass}>{label}</label>
-											<input
-												type="number"
-												class={compactInputClass}
-												step={step}
-												min={min}
-												value={sig}
-												on:input={(e) =>
-													(sig.value = clampNumberInput(
-														e.target.value,
-														min,
-														max ?? Infinity,
-														sig.value,
-													))
-												}
-											/>
-										</div>
-									))}
-								</div>
-								<label class={toggleLabelClass}>
-									<input
-										type="checkbox"
-										class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-900 dark:focus:ring-blue-400/20"
-										checked={screwHeadIsCountersunk}
-										on:change={(e) =>
-											(screwHeadIsCountersunk.value = e.target.checked)
-										}
-									/>
-									Countersunk
-								</label>
-							</div>
-
-							<If condition={fullOrLite.eq("Full")}>
-								{() => (
-									<div class={sectionClass}>
-										<div class={sectionTitleClass}>Backside Screws</div>
-										<label class={toggleLabelClass}>
-											<input
-												type="checkbox"
-												class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-900 dark:focus:ring-blue-400/20"
-												checked={backsideScrewHole}
-												on:change={(e) =>
-													(backsideScrewHole.value = e.target.checked)
-												}
-											/>
-											Enable backside
-										</label>
-										<div class="grid grid-cols-2 gap-x-4 gap-y-3">
-											{[
-												{
-													label: "Head Shrink",
-													step: 0.1,
-													sig: backsideScrewHeadDiameterShrinkValue,
-													min: MEASUREMENT_MIN,
-												},
-												{
-													label: "Head Inset",
-													step: 0.1,
-													sig: backsideScrewHeadInsetValue,
-													min: MEASUREMENT_MIN,
-												},
-											].map(({ label, sig, step, min, max }) => (
-												<div class="grid gap-1">
-													<label class={fieldLabelClass}>{label}</label>
-													<input
-														type="number"
-														class={compactInputClass}
-														step={step}
-														min={min}
-														value={sig}
-														on:input={(e) =>
-															(sig.value = clampNumberInput(
-																e.target.value,
-																min,
-																max ?? Infinity,
-																sig.value,
-															))
-														}
-													/>
-												</div>
-											))}
-										</div>
-										<label class={toggleLabelClass}>
-											<input
-												type="checkbox"
-												class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-900 dark:focus:ring-blue-400/20"
-												checked={backsideScrewHeadIsCountersunk}
-												on:change={(e) =>
-													(backsideScrewHeadIsCountersunk.value =
-														e.target.checked)
-												}
-											/>
-											Backside countersunk
-										</label>
-									</div>
-								)}
-							</If>
-
-							<If condition={fullOrLite.eq("Lite")}>
-								{() => (
-									<div class={sectionClass}>
-										<div class={sectionTitleClass}>Adhesive Base</div>
-										<label class={toggleLabelClass}>
-											<input
-												type="checkbox"
-												class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-900 dark:focus:ring-blue-400/20"
-												checked={addAdhesiveBase}
-												on:change={(e) =>
-													(addAdhesiveBase.value = e.target.checked)
-												}
-											/>
-											Enable base
-										</label>
-										<div class="grid gap-1">
-											<label class={fieldLabelClass}>Thickness</label>
-										<input
-											type="number"
-											class={compactInputClass}
-											min={MEASUREMENT_MIN}
-											value={adhesiveBaseThicknessValue}
-											on:input={(e) =>
-												(adhesiveBaseThicknessValue.value =
-													clampNumberInput(
-														e.target.value,
-														MEASUREMENT_MIN,
-														Infinity,
-														adhesiveBaseThicknessValue.value,
-													))
-											}
-										/>
-										</div>
-									</div>
-								)}
-							</If>
-
-							<div class={sectionClass}>
-								<div class={sectionTitleClass}>Dimensions</div>
-								<div class="grid grid-cols-2 gap-x-4 gap-y-3">
-									{[
-										{
-											label: "Tile Size",
-											step: 1,
-											sig: tileSizeValue,
-											min: TILE_SIZE_MIN,
-											integer: true,
-										},
-										{
-											label: "Thickness",
-											type: "Full",
-											step: 0.1,
-											sig: tileThicknessValue,
-											min: POSITIVE_MEASUREMENT_MIN,
-										},
-										{
-											label: "Lite Thickness",
-											type: "Lite",
-											step: 0.1,
-											sig: liteTileThicknessValue,
-											min: POSITIVE_MEASUREMENT_MIN,
-										},
-										{
-											label: "Heavy Thickness",
-											type: "Heavy",
-											step: 0.1,
-											sig: heavyTileThicknessValue,
-											min: POSITIVE_MEASUREMENT_MIN,
-										},
-										{
-											label: "Heavy Gap",
-											type: "Heavy",
-											step: 0.1,
-											sig: heavyTileGapValue,
-											min: MEASUREMENT_MIN,
-										},
-									].map(({ label, type, sig, step, min, max, integer }) => (
-										<If
-											condition={() =>
-												type ? fullOrLite.value === type : true
-											}
-										>
-											{() => (
-												<div class="grid gap-1">
-													<label class={fieldLabelClass}>{label}</label>
-													<input
-														type="number"
-														class={compactInputClass}
-														step={step}
-														min={min}
-														value={sig}
-														on:input={(e) =>
-															(sig.value = integer
-																? clampIntegerInput(
-																	e.target.value,
-																	min,
-																	max ?? Infinity,
-																	sig.value,
-																)
-																: clampNumberInput(
-																	e.target.value,
-																	min,
-																	max ?? Infinity,
-																	sig.value,
-																))
-														}
-													/>
-												</div>
-											)}
-										</If>
-									))}
-								</div>
-							</div>
-
-							<div class={sectionClass}>
-								<div class={sectionTitleClass}>Quality</div>
-								<div class="grid grid-cols-2 gap-x-4 gap-y-3">
-									<div class="grid gap-1">
-										<label class={fieldLabelClass}>Segments</label>
-										<input
-											type="number"
-											class={compactInputClass}
-											min={SEGMENTS_MIN}
-											value={circleSegmentsValue}
-											on:input={(e) =>
-												(circleSegmentsValue.value =
-													clampIntegerInput(
-														e.target.value,
-														SEGMENTS_MIN,
-														Infinity,
-														circleSegmentsValue.value,
-													))
-											}
-										/>
-									</div>
-								</div>
-							</div>
-
-							<div class="grid gap-3 border-t border-gray-200 pt-4 dark:border-slate-800">
-								<button class={chipButtonClass} on:click={clearConfiguration}>
-									Clear Saved Config
-								</button>
-							</div>
-						</div>
-					</div>
-				</div>
-			</div>
-
-			{/* Right: Preview Area */}
-			<div class="flex-1 min-w-0 flex flex-col h-full bg-white relative dark:bg-slate-950">
-				{/* Title Bar */}
-				<div class="border-b border-gray-200 bg-white z-20 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-					<div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 sm:gap-3 sm:px-6 sm:py-3 lg:px-8">
-						<div class="flex min-w-0 flex-wrap items-center gap-2 sm:gap-4">
-							<If condition={isMobileLayout}>
-								{() => (
-									<button
-										class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-										on:click={openConfigPanel}
-										aria-label="Open configuration"
-									>
-										<svg
-											aria-hidden="true"
-											viewBox="0 0 20 20"
-											class="h-5 w-5 fill-none stroke-current"
-											stroke-width="1.8"
-											stroke-linecap="round"
-										>
-											<path d="M3.5 5.5h13" />
-											<path d="M3.5 10h13" />
-											<path d="M3.5 14.5h13" />
-										</svg>
-									</button>
-								)}
-							</If>
-							<img
-								src="/logo.png"
-								alt="openGrid Studio logo"
-								class="h-7 w-7 rounded-lg object-contain shadow-lg shadow-blue-500/20 sm:h-8 sm:w-8"
-							/>
-							<h1 class="text-sm sm:text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-slate-400">
-								openGrid Studio
-							</h1>
-							<button
-								class={aboutButtonClass}
-								on:click={() => (showAboutModal.value = true)}
-							>
-								ⓘ
-							</button>
-							<If condition={isDesktopLayout}>
-								{() => <PreviewModeSwitcher />}
-							</If>
-						</div>
-						<If condition={isDesktopLayout}>
-							{() => (
-								<div class="flex w-full flex-wrap gap-2 items-center sm:w-auto sm:justify-end">
-									<ThemeSwitcher />
-									<DownloadActions />
-								</div>
-							)}
-						</If>
-					</div>
-				</div>
-				<If condition={exportError}>
-					{() => (
-						<div class="px-4 sm:px-6 lg:px-8 py-3 border-b border-rose-200 bg-rose-50 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
-							{exportError}
-						</div>
-					)}
-				</If>
-
-				{/* Editor Surface */}
-				<If condition={previewMode.eq("2d")}>
-					{() => (
-						<div class="flex-1 min-h-0 relative overflow-hidden bg-white dark:bg-slate-950">
-							<div class="absolute inset-0" style={editor2DBackgroundStyle}></div>
-							<div
-								class={editor2DViewportClass}
-								style={editor2DViewportStyle}
-							>
-								<div
-									class="absolute inset-0 cursor-grab select-none"
-									style="touch-action: none;"
-									$ref={attach2DEditorViewport}
-									on:contextmenu={(event) => event.preventDefault()}
-									on:pointerdown={on2DEditorPointerDown}
-									on:pointermove={on2DEditorPointerMove}
-									on:pointerup={on2DEditorPointerFinish}
-									on:pointercancel={on2DEditorPointerFinish}
-									on:wheel={on2DEditorWheel}
-								>
-									<svg
-										attr:viewBox={editor2DSvgViewBox}
-										attr:preserveAspectRatio={editor2DSvgPreserveAspectRatio}
-										attr:width={editor2DSvgWidth}
-										attr:height={editor2DSvgHeight}
-										class={editor2DSvgClass}
-										style={editor2DSvgStyle}
-									>
-										<defs>
-											<clipPath
-												attr:id={editor2DBoardMaterialClipId}
-												attr:clipPathUnits="userSpaceOnUse"
-											>
-												<path attr:d={editor2DBoardMaterialPath} />
-											</clipPath>
-											<mask
-												attr:id={editor2DNodeMaskId}
-												attr:maskUnits="userSpaceOnUse"
-												attr:maskContentUnits="userSpaceOnUse"
-												attr:x="0"
-												attr:y="0"
-												attr:width={svgW}
-												attr:height={svgH}
-											>
-												<rect
-													attr:x="0"
-													attr:y="0"
-													attr:width={svgW}
-													attr:height={svgH}
-													attr:fill="white"
-												/>
-
-												<For entries={nodes} track="id">
-													{({ item: { gx, gy } }) => {
-														const { x, y } = toNodeXY(gx, gy);
-														const kind = $(
-															() => topo.value.nodeKind[gy]?.[gx] ?? "none",
-														);
-														const dir = $(
-															() => topo.value.nodeDir[gy]?.[gx] ?? null,
-														);
-														const state = $(() =>
-															nodeState(
-																kind.value,
-																getMask(maskGrid.value, gx, gy),
-															),
-														);
-														return (
-															<NodeGlyph
-																kind={kind}
-																state={state}
-																x={x}
-																y={y}
-																dir={dir}
-																outerFill="none"
-																innerFill="black"
-															/>
-														);
-													}}
-												</For>
-											</mask>
-										</defs>
-
-										<g attr:transform={editor2DSceneTransform}>
-											<g attr:mask={`url(#${editor2DNodeMaskId})`}>
-												<If condition={$(() => !!editor2DBoardMaterialPath.value)}>
-													{() => (
-														<path
-															attr:d={editor2DBoardMaterialPath}
-															attr:fill={editor2DBoardFill}
-														/>
-													)}
-												</If>
-												<If condition={$(() => !!editor2DActiveTileInsetPath.value)}>
-													{() => (
-														<path
-															attr:d={editor2DActiveTileInsetPath}
-															attr:fill="#2563eb"
-														/>
-													)}
-												</If>
-												<If condition={$(() => !!editor2DNodeOverlayPath.value)}>
-													{() => (
-														<path
-															attr:d={editor2DNodeOverlayPath}
-															attr:fill={editor2DBoardFill}
-															attr:clip-path={`url(#${editor2DBoardMaterialClipId})`}
-														/>
-													)}
-												</If>
-											</g>
-
-											<For entries={tiles} track="id">
-												{({ item: { tx, ty, gx, gy } }) => (
-													<rect
-														attr:data-editor-action="tile"
-														attr:data-gx={gx}
-														attr:data-gy={gy}
-														attr:x={pad + tx * tileSize}
-														attr:y={pad + ty * tileSize}
-														attr:width={tileSize}
-														attr:height={tileSize}
-														attr:fill="transparent"
-													/>
-												)}
-											</For>
-
-											<For entries={nodes} track="id">
-												{({ item: { gx, gy } }) => {
-													const { x, y } = toNodeXY(gx, gy);
-													return (
-														<circle
-															attr:data-editor-action="node"
-															attr:data-gx={gx}
-															attr:data-gy={gy}
-															attr:cx={x}
-															attr:cy={y}
-															attr:r={20}
-															attr:fill="transparent"
-														/>
-													);
-												}}
-											</For>
-
-											<Editor2DResizeButton
-												cx={editor2DTopAddX}
-												cy={editor2DTopControlY}
-												label="+"
-												action="top-add"
-											/>
-											<Editor2DResizeButton
-												cx={editor2DTopRemoveX}
-												cy={editor2DTopControlY}
-												label="-"
-												action="top-remove"
-											/>
-											<Editor2DResizeButton
-												cx={editor2DLeftControlX}
-												cy={editor2DLeftAddY}
-												label="+"
-												action="left-add"
-											/>
-											<Editor2DResizeButton
-												cx={editor2DLeftControlX}
-												cy={editor2DLeftRemoveY}
-												label="-"
-												action="left-remove"
-											/>
-											<Editor2DResizeButton
-												cx={editor2DRightControlX}
-												cy={editor2DRightAddY}
-												label="+"
-												action="right-add"
-											/>
-											<Editor2DResizeButton
-												cx={editor2DRightControlX}
-												cy={editor2DRightRemoveY}
-												label="-"
-												action="right-remove"
-											/>
-											<Editor2DResizeButton
-												cx={editor2DBottomAddX}
-												cy={editor2DBottomControlY}
-												label="+"
-												action="bottom-add"
-											/>
-											<Editor2DResizeButton
-												cx={editor2DBottomRemoveX}
-												cy={editor2DBottomControlY}
-												label="-"
-												action="bottom-remove"
-											/>
-										</g>
-									</svg>
-								</div>
-							</div>
-							<If condition={editor2DShowHint}>
-								{() => (
-									<div class={editor2DHintClass}>
-										Drag to pan. Wheel or pinch to zoom. Click/tap to edit.
-									</div>
-								)}
-							</If>
-						</div>
-					)}
-				</If>
-				<If condition={previewMode.eq("3d")}>
-					{() => (
-						<div class="flex-1 min-h-0 relative bg-gray-50/50 dark:bg-slate-900/40">
-							<RealtimePreview
-								mesh={previewMesh}
-								loading={previewLoading}
-								error={previewError}
-								theme={resolvedTheme}
-								mobileLayout={isMobileLayout}
-							/>
-						</div>
-					)}
-				</If>
-				<If condition={isMobileLayout}>
-					{() => <PreviewModeSwitcher mobile />}
-				</If>
-				<If condition={isMobileLayout}>
-					{() => <DownloadActions mobile />}
-				</If>
-			</div>
-
-			{/* Copy Modal */}
-			<If condition={showModal}>
-				{() => (
-					<div class="fixed inset-0 z-[100] flex items-center justify-center p-8">
-						<div
-							class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm"
-							on:click={() => (showModal.value = false)}
-						></div>
-						<div class="bg-white rounded-3xl w-full max-w-2xl flex flex-col shadow-2xl overflow-hidden relative animate-modal-in dark:bg-slate-950 dark:border dark:border-slate-800">
-							<div class="p-6 border-b border-gray-200 flex justify-between items-center dark:border-slate-800">
-								<h3 class="text-xl font-bold text-gray-900 dark:text-slate-100">
-									Copy SCAD Code
-								</h3>
-								<button
-									class="text-gray-400 hover:text-gray-600 transition dark:text-slate-500 dark:hover:text-slate-300"
-									on:click={() => (showModal.value = false)}
-								>
-									<svg
-										class="w-6 h-6"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M6 18L18 6M6 6l12 12"
-										></path>
-									</svg>
-								</button>
-							</div>
-							<div class="p-6 bg-gray-50 dark:bg-slate-900/60">
-								<textarea
-									readonly
-									class="w-full h-80 border border-gray-200 rounded-xl p-4 font-mono text-[10px] text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition leading-tight resize-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:ring-blue-400/20"
-									$ref={(el) => {
-										if (el) {
-											el.select();
-										}
-									}}
-									value={exportText}
-								/>
-							</div>
-							<div class="p-6 border-t border-gray-200 flex justify-end gap-3 dark:border-slate-800">
-								<button
-									class={modalActionClass}
-									on:click={() => (showModal.value = false)}
-								>
-									Close
-								</button>
-								<button
-									class={modalPrimaryActionClass}
-									on:click={async () => {
-										await navigator.clipboard.writeText(exportText.value);
-										showModal.value = false;
-									}}
-								>
-									Copy to Clipboard
-								</button>
-							</div>
-						</div>
-					</div>
-				)}
-			</If>
-
-			{/* About Modal */}
-			<If condition={showAboutModal}>
-				{() => (
-					<div class="fixed inset-0 z-[100] flex items-center justify-center p-8">
-						<div
-							class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm"
-							on:click={() => (showAboutModal.value = false)}
-						></div>
-						<div class="bg-white rounded-3xl w-full max-w-2xl flex flex-col shadow-2xl overflow-hidden relative animate-modal-in dark:bg-slate-950 dark:border dark:border-slate-800">
-							<div class="p-6 border-b border-gray-200 flex justify-between items-center dark:border-slate-800">
-								<h3 class="text-xl font-bold text-gray-900 dark:text-slate-100">
-									About openGrid Studio
-								</h3>
-								<button
-									class="text-gray-400 hover:text-gray-600 transition dark:text-slate-500 dark:hover:text-slate-300"
-									on:click={() => (showAboutModal.value = false)}
-								>
-									<svg
-										class="w-6 h-6"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M6 18L18 6M6 6l12 12"
-										></path>
-									</svg>
-								</button>
-							</div>
-							<div class="p-6 bg-gray-50 grid gap-5 text-sm text-gray-700 dark:bg-slate-900/60 dark:text-slate-300">
-								<div class="grid gap-2">
-									<div class="text-xs font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-slate-500">
-										Project
-									</div>
-									<p>
-										openGrid Studio is a browser-based editor for designing openGrid boards with
-										fast 2D editing, realtime 3D preview, and direct export.
-									</p>
-									<p>
-										Repository:{" "}
-										<a
-											class="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200"
-											href="https://github.com/ClassicOldSong/openGrid-Studio"
-											target="_blank"
-											rel="noreferrer"
-										>
-											github.com/ClassicOldSong/openGrid-Studio
-										</a>
-									</p>
-								</div>
-								<div class="grid gap-2">
-									<div class="text-xs font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-slate-500">
-										Credits
-									</div>
-									<p>
-										Original openGrid project: based on the original openGrid design and
-										generator.
-										{" "}
-										<a
-											class="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200"
-											href="https://www.opengrid.world/"
-											target="_blank"
-											rel="noreferrer"
-										>
-											opengrid.world
-										</a>
-									</p>
-									<p>
-										Manifold: powered by the Manifold geometry kernel and the{" "}
-										<code>manifold-3d</code> browser bindings used for realtime preview and
-										export.
-										{" "}
-										<a
-											class="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200"
-											href="https://github.com/elalish/manifold"
-											target="_blank"
-											rel="noreferrer"
-										>
-											github.com/elalish/manifold
-										</a>
-									</p>
-									<p>
-										Yukino Song: openGrid Studio by Yukino Song.
-										{" "}
-										<a
-											class="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200"
-											href="https://x.com/ClassicOldSong"
-											target="_blank"
-											rel="noreferrer"
-										>
-											x.com/ClassicOldSong
-										</a>
-									</p>
-								</div>
-							</div>
-							<div class="p-6 border-t border-gray-200 flex justify-end dark:border-slate-800">
-								<button
-									class={modalPrimaryActionClass}
-									on:click={() => (showAboutModal.value = false)}
-								>
-									Close
-								</button>
-							</div>
-						</div>
-					</div>
-				)}
-			</If>
+			<ConfigPanel panel={configPanelProps} />
+			<PreviewPane
+				pane={previewPaneProps}
+				controls={{
+					theme: themeControls,
+					download: downloadControls,
+					previewMode: previewModeControls,
+				}}
+			/>
+			<CopyScadModal modal={copyModalProps} />
+			<AboutModal modal={aboutModalProps} />
 		</div>
 	);
 }

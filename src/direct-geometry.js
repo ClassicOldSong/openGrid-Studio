@@ -41,7 +41,7 @@ async function getManifoldApi() {
 	return await manifoldPromise;
 }
 
-export async function warmDirectStl() {
+export async function warmDirectGeometry() {
 	await getManifoldApi();
 }
 

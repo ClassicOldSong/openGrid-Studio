@@ -1,8 +1,8 @@
-import { renderDirectExport, renderDirectPreviewMesh, warmDirectStl } from './direct-stl.js'
+import { renderDirectExport, renderDirectPreviewMesh, warmDirectGeometry } from './direct-geometry.js'
 
 self.onmessage = async ({ data }) => {
 	if (data?.type === 'warmup') {
-		await Promise.allSettled([warmDirectStl()])
+		await Promise.allSettled([warmDirectGeometry()])
 		return
 	}
 

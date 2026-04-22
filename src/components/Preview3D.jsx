@@ -188,7 +188,7 @@ function defaultRotation() {
 	return quatNormalize(quatMultiply(roll, quatMultiply(pitch, yaw)))
 }
 
-export default function RealtimePreview({ mesh, loading, error, theme, mobileLayout }) {
+export default function Preview3D({ mesh, loading, error, theme, mobileLayout }) {
 	const meshSig = $(() => read(mesh))
 	const loadingSig = $(() => read(loading))
 	const errorSig = $(() => read(error))
