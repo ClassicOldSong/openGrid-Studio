@@ -9,15 +9,17 @@ function diamondPoints(x, y, r) {
 
 export const NodeGlyph = ({ kind, state, x, y, dir, innerFill = '#fff' }) => {
 	const visible = $(() => ['outer', 'edge', 'inner', 'full', 'diag'].includes(kind.value))
+	const showChamfer = $(() => visible.value && state.value === 'chamfer')
+	const showHole = $(() => visible.value && state.value === 'hole')
 
 	return (
-		<If condition={visible}>
-			<If condition={() => state.value === 'chamfer'}>
-				{() => <polygon attr:points={diamondPoints(x, y, inner)} attr:fill={'innerFill'} />}
+		<>
+			<If condition={showChamfer}>
+				{() => <polygon attr:points={diamondPoints(x, y, inner)} attr:fill={innerFill} />}
 			</If>
-			<If condition={() => state.value === 'hole'}>
+			<If condition={showHole}>
 				{() => <circle attr:cx={x} attr:cy={y} attr:r={hole} attr:fill={innerFill} />}
 			</If>
-		</If>
+		</>
 	)
 }
