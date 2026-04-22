@@ -1133,31 +1133,48 @@ export default function App() {
 	};
 
 	const Editor2DResizeButton = ({ cx, cy, label, action }) => (
-		<g
-			attr:data-editor-action={action}
-			style="cursor: pointer;"
-		>
-			<circle
-				attr:cx={cx}
-				attr:cy={cy}
-				attr:r={EDITOR_2D_RESIZE_BUTTON_RADIUS}
-				attr:fill={editor2DResizeButtonFill}
-				attr:stroke={editor2DResizeButtonStroke}
-				attr:stroke-width="1.5"
-			/>
-			<text
-				attr:x={cx}
-				attr:y={cy}
-				attr:fill={editor2DResizeButtonText}
-				attr:text-anchor="middle"
-				attr:dominant-baseline="central"
-				attr:font-size="15"
-				attr:font-weight="700"
-				style="pointer-events: none; user-select: none;"
-			>
-				{label}
-			</text>
-		</g>
+		(() => {
+			const x = $(() => read(cx));
+			const y = $(() => read(cy));
+			return (
+				<g
+					attr:data-editor-action={action}
+					style="cursor: pointer;"
+				>
+					<circle
+						attr:cx={x}
+						attr:cy={y}
+						attr:r={EDITOR_2D_RESIZE_BUTTON_RADIUS}
+						attr:fill={editor2DResizeButtonFill}
+						attr:stroke={editor2DResizeButtonStroke}
+						attr:stroke-width="1.5"
+					/>
+					<g
+						attr:stroke={editor2DResizeButtonText}
+						attr:stroke-width="1.8"
+						attr:stroke-linecap="round"
+						style="pointer-events: none; user-select: none;"
+					>
+						<line
+							attr:x1={$(() => x.value - 4.5)}
+							attr:y1={y}
+							attr:x2={$(() => x.value + 4.5)}
+							attr:y2={y}
+						/>
+						<If condition={label === "+"}>
+							{() => (
+								<line
+									attr:x1={x}
+									attr:y1={$(() => y.value - 4.5)}
+									attr:x2={x}
+									attr:y2={$(() => y.value + 4.5)}
+								/>
+							)}
+						</If>
+					</g>
+				</g>
+			);
+		})()
 	);
 
 	const copy = async () => {
@@ -1482,10 +1499,11 @@ export default function App() {
 	const editor2DResizeButtonText = $(() =>
 		resolvedTheme.value === "dark" ? "#e2e8f0" : "#334155",
 	);
-	const editor2DTopControlY = pad / 2;
-	const editor2DLeftControlX = pad / 2;
-	const editor2DRightControlX = $(() => svgW.value - pad / 2);
-	const editor2DBottomControlY = $(() => svgH.value - pad / 2);
+	const editor2DControlInset = pad / 2 - 6;
+	const editor2DTopControlY = editor2DControlInset;
+	const editor2DLeftControlX = editor2DControlInset;
+	const editor2DRightControlX = $(() => svgW.value - editor2DControlInset);
+	const editor2DBottomControlY = $(() => svgH.value - editor2DControlInset);
 	const editor2DCenterX = $(() => svgW.value / 2);
 	const editor2DCenterY = $(() => svgH.value / 2);
 	const editor2DTopAddX = $(() => editor2DCenterX.value - EDITOR_2D_RESIZE_BUTTON_OFFSET);
