@@ -1,4 +1,4 @@
-import { signal, $, watch, onDispose, For, If, read } from "refui";
+import { signal, $, watch, onDispose, For, If, read, nextTick } from "refui";
 import RealtimePreview from "./RealtimePreview.jsx";
 
 // --- Constants & Pure Utils ---
@@ -934,16 +934,19 @@ export default function App() {
 		const raw = localStorage.getItem(STORAGE_KEY);
 		if (raw) {
 			const saved = JSON.parse(raw);
-			if (saved)
-				applyConfig({
-					...DEFAULT_CONFIG,
-					...saved,
-					themeMode:
-						saved.themeMode ??
-						(saved.theme === "light" || saved.theme === "dark"
-							? saved.theme
-							: DEFAULT_CONFIG.themeMode),
-				});
+			if (saved) {
+				nextTick(() => {
+					applyConfig({
+						...DEFAULT_CONFIG,
+						...saved,
+						themeMode:
+							saved.themeMode ??
+							(saved.theme === "light" || saved.theme === "dark"
+								? saved.theme
+								: DEFAULT_CONFIG.themeMode),
+					});
+				})
+			}
 		}
 	} catch (e) {}
 
@@ -1516,7 +1519,7 @@ export default function App() {
 	const editor2DRightRemoveY = $(() => editor2DCenterY.value + EDITOR_2D_RESIZE_BUTTON_OFFSET);
 	const editor2DHintClass = $(() =>
 		isMobileLayout.value
-			? "pointer-events-none absolute left-1/2 bottom-20 z-10 w-[min(calc(100%-2rem),320px)] -translate-x-1/2 rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-center text-[11px] font-medium text-slate-500 backdrop-blur dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-400"
+			? "pointer-events-none absolute left-1/2 top-4 z-10 w-[min(calc(100%-2rem),320px)] -translate-x-1/2 rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-center text-[11px] font-medium text-slate-500 backdrop-blur dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-400"
 			: "pointer-events-none absolute right-4 bottom-4 z-10 rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-[11px] font-medium text-slate-500 backdrop-blur dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-400",
 	);
 
@@ -1670,6 +1673,20 @@ export default function App() {
 		"absolute right-0 top-full z-30 mt-2 min-w-40 rounded-xl border border-gray-200 bg-white p-1 shadow-[0_12px_30px_rgba(15,23,42,0.14)] dark:border-slate-700 dark:bg-slate-900";
 	const exportMenuAboveClass =
 		"absolute bottom-full right-0 z-30 mb-2 min-w-40 rounded-xl border border-gray-200 bg-white p-1 shadow-[0_12px_30px_rgba(15,23,42,0.14)] dark:border-slate-700 dark:bg-slate-900";
+	const mobileFloatingBottomStyle =
+		"bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);";
+	const mobileFloatingLeftStyle =
+		`${mobileFloatingBottomStyle} left: calc(env(safe-area-inset-left, 0px) + 1rem);`;
+	const mobileFloatingRightStyle =
+		`${mobileFloatingBottomStyle} right: calc(env(safe-area-inset-right, 0px) + 1rem);`;
+	const mobilePreviewControlsInset =
+		"calc(env(safe-area-inset-bottom, 0px) + 4.75rem)";
+	const editor2DViewportClass = $(() =>
+		isMobileLayout.value ? "absolute inset-x-0 top-0" : "absolute inset-0",
+	);
+	const editor2DViewportStyle = $(() =>
+		isMobileLayout.value ? `bottom: ${mobilePreviewControlsInset};` : undefined,
+	);
 	const exportMenuItemClass = (format) =>
 		$(() =>
 			[
@@ -2029,9 +2046,10 @@ export default function App() {
 		<div
 			class={
 				mobile
-					? "fixed bottom-4 right-4 z-20 flex items-stretch"
+					? "fixed z-30 flex items-stretch"
 					: "relative flex items-stretch"
 			}
+			style={mobile ? mobileFloatingRightStyle : undefined}
 		>
 			<button
 				class={exportButtonClass}
@@ -2081,9 +2099,10 @@ export default function App() {
 		<div
 			class={
 				mobile
-					? "pointer-events-auto absolute bottom-4 left-4 z-20"
+					? "pointer-events-auto fixed z-30"
 					: "block"
 			}
+			style={mobile ? mobileFloatingLeftStyle : undefined}
 		>
 			<div class={previewBarClass}>
 				<button
@@ -2307,8 +2326,8 @@ export default function App() {
 											value={stackingMethod}
 											on:change={(e) => (stackingMethod.value = e.target.value)}
 										>
-											<option>Interface Layer</option>
-											<option>Ironing - BETA</option>
+											<option value="Interface Layer">Interface Layer</option>
+											<option value="Ironing - BETA">Ironing - BETA</option>
 										</select>
 									</div>
 									<div class="grid gap-1">
@@ -2697,191 +2716,196 @@ export default function App() {
 						<div class="flex-1 min-h-0 relative overflow-hidden bg-white dark:bg-slate-950">
 							<div class="absolute inset-0" style={editor2DBackgroundStyle}></div>
 							<div
-								class="absolute inset-0 cursor-grab select-none"
-								style="touch-action: none;"
-								$ref={attach2DEditorViewport}
-								on:contextmenu={(event) => event.preventDefault()}
-								on:pointerdown={on2DEditorPointerDown}
-								on:pointermove={on2DEditorPointerMove}
-								on:pointerup={on2DEditorPointerFinish}
-								on:pointercancel={on2DEditorPointerFinish}
-								on:wheel={on2DEditorWheel}
+								class={editor2DViewportClass}
+								style={editor2DViewportStyle}
 							>
-								<svg
-									attr:viewBox={editor2DViewBox}
-									attr:preserveAspectRatio="xMidYMid meet"
-									class="block h-full w-full"
-									style="background: transparent;"
+								<div
+									class="absolute inset-0 cursor-grab select-none"
+									style="touch-action: none;"
+									$ref={attach2DEditorViewport}
+									on:contextmenu={(event) => event.preventDefault()}
+									on:pointerdown={on2DEditorPointerDown}
+									on:pointermove={on2DEditorPointerMove}
+									on:pointerup={on2DEditorPointerFinish}
+									on:pointercancel={on2DEditorPointerFinish}
+									on:wheel={on2DEditorWheel}
 								>
-												<defs>
-													<clipPath
-														attr:id={editor2DBoardMaterialClipId}
-														attr:clipPathUnits="userSpaceOnUse"
-													>
-														<path attr:d={editor2DBoardMaterialPath} />
-													</clipPath>
-													<mask
-														attr:id={editor2DNodeMaskId}
-														attr:maskUnits="userSpaceOnUse"
-														attr:maskContentUnits="userSpaceOnUse"
-														attr:x="0"
-														attr:y="0"
-														attr:width={svgW}
-														attr:height={svgH}
-													>
-														<rect
+									<svg
+										attr:viewBox={editor2DViewBox}
+										attr:preserveAspectRatio="xMidYMid meet"
+										class="block h-full w-full"
+										style="background: transparent;"
+									>
+													<defs>
+														<clipPath
+															attr:id={editor2DBoardMaterialClipId}
+															attr:clipPathUnits="userSpaceOnUse"
+														>
+															<path attr:d={editor2DBoardMaterialPath} />
+														</clipPath>
+														<mask
+															attr:id={editor2DNodeMaskId}
+															attr:maskUnits="userSpaceOnUse"
+															attr:maskContentUnits="userSpaceOnUse"
 															attr:x="0"
 															attr:y="0"
 															attr:width={svgW}
 															attr:height={svgH}
-															attr:fill="white"
-														/>
-
-														<For entries={nodes} track="id">
-															{({ item: { gx, gy } }) => {
-																const { x, y } = toNodeXY(gx, gy);
-																const kind = $(
-																	() => topo.value.nodeKind[gy]?.[gx] ?? "none",
-																);
-																const dir = $(
-																	() => topo.value.nodeDir[gy]?.[gx] ?? null,
-																);
-																const state = $(() =>
-																	nodeState(
-																		kind.value,
-																		getMask(maskGrid.value, gx, gy),
-																	),
-																);
-																return (
-																	<NodeGlyph
-																		kind={kind}
-																		state={state}
-																		x={x}
-																		y={y}
-																		dir={dir}
-																		outerFill="none"
-																		innerFill="black"
-																	/>
-																);
-															}}
-														</For>
-													</mask>
-												</defs>
-
-												<g attr:mask={`url(#${editor2DNodeMaskId})`}>
-													<If condition={$(() => !!editor2DBoardMaterialPath.value)}>
-														{() => (
-															<path
-																attr:d={editor2DBoardMaterialPath}
-																attr:fill={editor2DBoardFill}
+														>
+															<rect
+																attr:x="0"
+																attr:y="0"
+																attr:width={svgW}
+																attr:height={svgH}
+																attr:fill="white"
 															/>
-														)}
-													</If>
-													<If condition={$(() => !!editor2DActiveTileInsetPath.value)}>
-														{() => (
-															<path
-																attr:d={editor2DActiveTileInsetPath}
-																attr:fill="#2563eb"
-															/>
-														)}
-													</If>
-													<If condition={$(() => !!editor2DNodeOverlayPath.value)}>
-														{() => (
-															<path
-																attr:d={editor2DNodeOverlayPath}
-																attr:fill={editor2DBoardFill}
-																attr:clip-path={`url(#${editor2DBoardMaterialClipId})`}
-															/>
-														)}
-													</If>
-												</g>
 
-												<For entries={tiles} track="id">
-													{({ item: { tx, ty, gx, gy } }) => (
-														<rect
-															attr:data-editor-action="tile"
-															attr:data-gx={gx}
-															attr:data-gy={gy}
-															attr:x={pad + tx * tileSize}
-															attr:y={pad + ty * tileSize}
-															attr:width={tileSize}
-															attr:height={tileSize}
-															attr:fill="transparent"
-														/>
-													)}
-												</For>
+															<For entries={nodes} track="id">
+																{({ item: { gx, gy } }) => {
+																	const { x, y } = toNodeXY(gx, gy);
+																	const kind = $(
+																		() => topo.value.nodeKind[gy]?.[gx] ?? "none",
+																	);
+																	const dir = $(
+																		() => topo.value.nodeDir[gy]?.[gx] ?? null,
+																	);
+																	const state = $(() =>
+																		nodeState(
+																			kind.value,
+																			getMask(maskGrid.value, gx, gy),
+																		),
+																	);
+																	return (
+																		<NodeGlyph
+																			kind={kind}
+																			state={state}
+																			x={x}
+																			y={y}
+																			dir={dir}
+																			outerFill="none"
+																			innerFill="black"
+																		/>
+																	);
+																}}
+															</For>
+														</mask>
+													</defs>
 
-												<For entries={nodes} track="id">
-													{({ item: { gx, gy } }) => {
-														const { x, y } = toNodeXY(gx, gy);
-														return (
-															<circle
-																attr:data-editor-action="node"
+													<g attr:mask={`url(#${editor2DNodeMaskId})`}>
+														<If condition={$(() => !!editor2DBoardMaterialPath.value)}>
+															{() => (
+																<path
+																	attr:d={editor2DBoardMaterialPath}
+																	attr:fill={editor2DBoardFill}
+																/>
+															)}
+														</If>
+														<If condition={$(() => !!editor2DActiveTileInsetPath.value)}>
+															{() => (
+																<path
+																	attr:d={editor2DActiveTileInsetPath}
+																	attr:fill="#2563eb"
+																/>
+															)}
+														</If>
+														<If condition={$(() => !!editor2DNodeOverlayPath.value)}>
+															{() => (
+																<path
+																	attr:d={editor2DNodeOverlayPath}
+																	attr:fill={editor2DBoardFill}
+																	attr:clip-path={`url(#${editor2DBoardMaterialClipId})`}
+																/>
+															)}
+														</If>
+													</g>
+
+													<For entries={tiles} track="id">
+														{({ item: { tx, ty, gx, gy } }) => (
+															<rect
+																attr:data-editor-action="tile"
 																attr:data-gx={gx}
 																attr:data-gy={gy}
-																attr:cx={x}
-																attr:cy={y}
-																attr:r={20}
+																attr:x={pad + tx * tileSize}
+																attr:y={pad + ty * tileSize}
+																attr:width={tileSize}
+																attr:height={tileSize}
 																attr:fill="transparent"
 															/>
-														);
-													}}
-												</For>
+														)}
+													</For>
 
-												<Editor2DResizeButton
-													cx={editor2DTopAddX}
-													cy={editor2DTopControlY}
-													label="+"
-													action="top-add"
-												/>
-												<Editor2DResizeButton
-													cx={editor2DTopRemoveX}
-													cy={editor2DTopControlY}
-													label="-"
-													action="top-remove"
-												/>
-												<Editor2DResizeButton
-													cx={editor2DLeftControlX}
-													cy={editor2DLeftAddY}
-													label="+"
-													action="left-add"
-												/>
-												<Editor2DResizeButton
-													cx={editor2DLeftControlX}
-													cy={editor2DLeftRemoveY}
-													label="-"
-													action="left-remove"
-												/>
-												<Editor2DResizeButton
-													cx={editor2DRightControlX}
-													cy={editor2DRightAddY}
-													label="+"
-													action="right-add"
-												/>
-												<Editor2DResizeButton
-													cx={editor2DRightControlX}
-													cy={editor2DRightRemoveY}
-													label="-"
-													action="right-remove"
-												/>
-												<Editor2DResizeButton
-													cx={editor2DBottomAddX}
-													cy={editor2DBottomControlY}
-													label="+"
-													action="bottom-add"
-												/>
-												<Editor2DResizeButton
-													cx={editor2DBottomRemoveX}
-													cy={editor2DBottomControlY}
-													label="-"
-													action="bottom-remove"
-												/>
-								</svg>
+													<For entries={nodes} track="id">
+														{({ item: { gx, gy } }) => {
+															const { x, y } = toNodeXY(gx, gy);
+															return (
+																<circle
+																	attr:data-editor-action="node"
+																	attr:data-gx={gx}
+																	attr:data-gy={gy}
+																	attr:cx={x}
+																	attr:cy={y}
+																	attr:r={20}
+																	attr:fill="transparent"
+																/>
+															);
+														}}
+													</For>
+
+													<Editor2DResizeButton
+														cx={editor2DTopAddX}
+														cy={editor2DTopControlY}
+														label="+"
+														action="top-add"
+													/>
+													<Editor2DResizeButton
+														cx={editor2DTopRemoveX}
+														cy={editor2DTopControlY}
+														label="-"
+														action="top-remove"
+													/>
+													<Editor2DResizeButton
+														cx={editor2DLeftControlX}
+														cy={editor2DLeftAddY}
+														label="+"
+														action="left-add"
+													/>
+													<Editor2DResizeButton
+														cx={editor2DLeftControlX}
+														cy={editor2DLeftRemoveY}
+														label="-"
+														action="left-remove"
+													/>
+													<Editor2DResizeButton
+														cx={editor2DRightControlX}
+														cy={editor2DRightAddY}
+														label="+"
+														action="right-add"
+													/>
+													<Editor2DResizeButton
+														cx={editor2DRightControlX}
+														cy={editor2DRightRemoveY}
+														label="-"
+														action="right-remove"
+													/>
+													<Editor2DResizeButton
+														cx={editor2DBottomAddX}
+														cy={editor2DBottomControlY}
+														label="+"
+														action="bottom-add"
+													/>
+													<Editor2DResizeButton
+														cx={editor2DBottomRemoveX}
+														cy={editor2DBottomControlY}
+														label="-"
+														action="bottom-remove"
+													/>
+									</svg>
+								</div>
 							</div>
 							<If condition={editor2DShowHint}>
 								{() => (
 									<div class={editor2DHintClass}>
-										Drag to pan. Wheel or pinch to zoom. Tap to edit.
+										Drag to pan. Wheel or pinch to zoom. Click/tap to edit.
 									</div>
 								)}
 							</If>
@@ -2890,7 +2914,7 @@ export default function App() {
 				</If>
 				<If condition={previewMode.eq("3d")}>
 					{() => (
-						<div class="flex-1 min-h-0 bg-gray-50/50 dark:bg-slate-900/40">
+						<div class="flex-1 min-h-0 relative bg-gray-50/50 dark:bg-slate-900/40">
 							<RealtimePreview
 								mesh={previewMesh}
 								loading={previewLoading}

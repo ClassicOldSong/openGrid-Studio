@@ -196,6 +196,7 @@ export default function RealtimePreview({ mesh, loading, error, theme, mobileLay
 	const mobileLayoutSig = $(() => read(mobileLayout))
 	const rendererError = signal('')
 	const showHint = signal(true)
+	const mobileHintStyle = "top: 5.75rem;"
 
 	let hostEl = null
 	let canvasEl = null
@@ -651,7 +652,7 @@ export default function RealtimePreview({ mesh, loading, error, theme, mobileLay
 	const hintClass = $(() => {
 		if (!showHint.value || !meshSig.value) return 'hidden'
 		return mobileLayoutSig.value
-			? 'absolute left-1/2 bottom-20 w-[min(calc(100%-2rem),320px)] -translate-x-1/2 rounded-xl bg-white/85 border border-slate-200 px-3 py-2 text-center text-[11px] font-medium text-slate-500 backdrop-blur dark:bg-slate-950/70 dark:border-slate-700 dark:text-slate-400'
+			? 'absolute left-1/2 z-10 w-[min(calc(100%-2rem),320px)] -translate-x-1/2 rounded-xl bg-white/85 border border-slate-200 px-3 py-2 text-center text-[11px] font-medium text-slate-500 backdrop-blur dark:bg-slate-950/70 dark:border-slate-700 dark:text-slate-400'
 			: 'absolute right-4 bottom-4 rounded-xl bg-white/85 border border-slate-200 px-3 py-2 text-[11px] font-medium text-slate-500 backdrop-blur dark:bg-slate-950/70 dark:border-slate-700 dark:text-slate-400'
 	})
 
@@ -784,7 +785,9 @@ export default function RealtimePreview({ mesh, loading, error, theme, mobileLay
 				/>
 			</div>
 
-			<div class={hintClass}>Drag to orbit. Two fingers pan and zoom. Shift-drag or right-drag also pans.</div>
+			<div class={hintClass} style={mobileLayoutSig.value ? mobileHintStyle : undefined}>
+				Drag to orbit. Two fingers pan and zoom. Shift-drag or right-drag also pans.
+			</div>
 		</div>
 	)
 }
