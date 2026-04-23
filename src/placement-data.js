@@ -1,6 +1,6 @@
-const TILE_BIT = 1
-const HOLE_BIT = 2
-const CHAMFER_BIT = 4
+export const TILE_BIT = 1
+export const HOLE_BIT = 2
+export const CHAMFER_BIT = 4
 
 function bitHas(value, bit) {
 	return (value & bit) !== 0

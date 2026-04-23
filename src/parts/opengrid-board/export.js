@@ -61,8 +61,8 @@ export function buildOpenGridBoardEntryScad(config) {
 	} = config;
 
 	return `/*
-	Usage: Download 'opengrid_generator.scad' from https://github.com/ClassicOldSong/openGrid-Studio
-	and place in the same dir of this script.
+	Usage: Place the matching 'opengrid_generator.scad' from this project
+	in the same dir as this script.
 */
 
 include <BOSL2/std.scad>

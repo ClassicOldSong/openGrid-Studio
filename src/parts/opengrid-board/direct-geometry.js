@@ -1,6 +1,11 @@
 import { manifoldToGLTFDoc } from "manifold-3d/lib/scene-builder";
 import { toArrayBuffer as export3mfToArrayBuffer } from "manifold-3d/lib/export-3mf";
-import { buildPlacementData } from "../../placement-data.js";
+import {
+	buildPlacementData,
+	CHAMFER_BIT,
+	HOLE_BIT,
+	TILE_BIT,
+} from "../../placement-data.js";
 import {
 	buildConnectorCut,
 	getConnectorCutZ,
@@ -18,6 +23,7 @@ const CORNER_SQUARE_THICKNESS = 2.6;
 const INTERSECTION_DISTANCE = 4.2;
 const TILE_INNER_SIZE_DIFFERENCE = 3;
 const HEAVY_JOIN_SLICE_EPSILON = 0.01;
+const INTERFACE_FACE_EPSILON = 0.01;
 
 const shapeCache = new Map();
 
@@ -42,6 +48,57 @@ function unionAll(Manifold, items) {
 	if (items.length === 0) return emptyManifold(Manifold);
 	if (items.length === 1) return items[0];
 	return Manifold.union(items);
+}
+
+function buildInterfaceLayerFromFace(board, thickness, z0, z1) {
+	const faceSlab = board
+		.trimByPlane([0, 0, 1], z0)
+		.trimByPlane([0, 0, -1], -z1);
+	return faceSlab.project().extrude(thickness);
+}
+
+function mirrorExportGridForStackFlip(exportGrid) {
+	const boardH = exportGrid.length - 1;
+	const boardW = exportGrid[0].length - 1;
+	const mirrored = Array.from({ length: boardH + 1 }, () =>
+		Array(boardW + 1).fill(0),
+	);
+
+	for (let iy = 0; iy <= boardH; iy++) {
+		for (let ix = 0; ix <= boardW; ix++) {
+			const raw = exportGrid[iy][ix];
+			const nodeBits = raw & (HOLE_BIT | CHAMFER_BIT);
+			if (nodeBits) mirrored[boardH - iy][ix] |= nodeBits;
+			if (iy < boardH && ix < boardW && (raw & TILE_BIT)) {
+				mirrored[boardH - 1 - iy][ix] |= TILE_BIT;
+			}
+		}
+	}
+
+	return mirrored;
+}
+
+function getStackedConfig(config, shouldFlip) {
+	if (!shouldFlip) return config;
+	return {
+		...config,
+		exportGrid: mirrorExportGridForStackFlip(config.exportGrid),
+	};
+}
+
+function buildStackedBoard(board, height, shouldFlip) {
+	if (!shouldFlip) return board;
+	return board.mirror([0, 0, 1]).translate(0, 0, height);
+}
+
+function buildTopInterfaceLayer(board, thickness, boardHeight) {
+	const faceEpsilon = Math.min(INTERFACE_FACE_EPSILON, boardHeight / 2);
+	return buildInterfaceLayerFromFace(
+		board,
+		thickness,
+		boardHeight - faceEpsilon,
+		boardHeight,
+	);
 }
 
 function differenceAll(Manifold, base, cuts) {
@@ -572,15 +629,29 @@ async function buildDirectModel(config) {
 		if (adjustedStackCount === 1) {
 			model = fullBoard;
 		} else {
+			const shouldFlipStack = !config.backsideScrewHole;
+			const stackedConfig = getStackedConfig(config, shouldFlipStack);
+			const stackedBaseBoard = shouldFlipStack
+				? buildBoardCore(
+						Manifold,
+						CrossSection,
+						stackedConfig,
+						"Full",
+						config.tileThicknessValue,
+						true,
+					).board
+				: fullBoard;
 			const spacing =
 				config.tileThicknessValue +
 				adjustedInterfaceThickness +
 				2 * config.interfaceSeparationValue;
-			const mirroredBoard = fullBoard
-				.mirror([0, 0, 1])
-				.translate(0, 0, config.tileThicknessValue);
+			const stackedBoard = buildStackedBoard(
+				stackedBaseBoard,
+				config.tileThicknessValue,
+				shouldFlipStack,
+			);
 			const parts = range(adjustedStackCount).map((i) =>
-				mirroredBoard.translate(0, 0, i * spacing),
+				stackedBoard.translate(0, 0, i * spacing),
 			);
 
 			if (
@@ -588,9 +659,11 @@ async function buildDirectModel(config) {
 				config.interfaceThicknessValue > 0 &&
 				adjustedStackCount > 1
 			) {
-				const interfaceLayer = fullBoard
-					.slice(0)
-					.extrude(config.interfaceThicknessValue);
+				const interfaceLayer = buildTopInterfaceLayer(
+					stackedBoard,
+					config.interfaceThicknessValue,
+					config.tileThicknessValue,
+				);
 				for (let i = 0; i < adjustedStackCount - 1; i++) {
 					parts.push(
 						interfaceLayer.translate(
@@ -638,31 +711,42 @@ async function buildDirectModel(config) {
 				model = liteBoard;
 			}
 		} else {
-			const flippedLiteBoard = buildLiteBoard(
-				fullLiteBoard,
+			const shouldFlipStack = true;
+			const stackedConfig = getStackedConfig(config, shouldFlipStack);
+			const stackedFullLiteBoard = shouldFlipStack
+				? buildBoardCore(
+						Manifold,
+						CrossSection,
+						stackedConfig,
+						"Lite",
+						config.tileThicknessValue,
+						true,
+					).board
+				: fullLiteBoard;
+			const stackedLiteBoard = buildLiteBoard(
+				stackedFullLiteBoard,
 				config.tileThicknessValue,
 				config.liteTileThicknessValue,
-				true,
+				shouldFlipStack,
 			);
 			const spacing =
 				config.liteTileThicknessValue +
 				adjustedInterfaceThickness +
 				2 * config.interfaceSeparationValue;
-			const parts = range(adjustedStackCount).map((i) => {
-				const layer = i % 2 === 0 ? flippedLiteBoard : liteBoard;
-				return layer.translate(0, 0, i * spacing);
-			});
+			const parts = range(adjustedStackCount).map((i) =>
+				stackedLiteBoard.translate(0, 0, i * spacing),
+			);
 
 			if (
 				config.stackingMethod === "Interface Layer" &&
 				config.interfaceThicknessValue > 0 &&
 				adjustedStackCount > 1
 			) {
-				const cutPlane =
-					config.tileThicknessValue - config.liteTileThicknessValue;
-				const interfaceLayer = fullLiteBoard
-					.slice(cutPlane)
-					.extrude(config.interfaceThicknessValue);
+				const interfaceLayer = buildTopInterfaceLayer(
+					stackedLiteBoard,
+					config.interfaceThicknessValue,
+					config.liteTileThicknessValue,
+				);
 				for (let i = 0; i < adjustedStackCount - 1; i++) {
 					parts.push(
 						interfaceLayer.translate(
@@ -706,12 +790,42 @@ async function buildDirectModel(config) {
 		if (adjustedStackCount === 1) {
 			model = heavyBoard;
 		} else {
+			const shouldFlipStack = false;
+			const stackedConfig = getStackedConfig(config, shouldFlipStack);
+			const { board: stackedHeavyFaceBoard } = buildBoardCore(
+				Manifold,
+				CrossSection,
+				stackedConfig,
+				"Heavy",
+				config.tileThicknessValue,
+				true,
+			);
+			const { board: stackedHeavyMiddleBoard } = buildBoardCore(
+				Manifold,
+				CrossSection,
+				stackedConfig,
+				"Heavy",
+				config.tileThicknessValue,
+				false,
+			);
+			const stackedHeavyBaseBoard = buildHeavyBoard(
+				Manifold,
+				stackedHeavyFaceBoard,
+				stackedHeavyMiddleBoard,
+				config.tileThicknessValue,
+				config.heavyTileGapValue,
+			);
 			const spacing =
 				config.heavyTileThicknessValue +
 				adjustedInterfaceThickness +
 				2 * config.interfaceSeparationValue;
+			const stackedHeavyBoard = buildStackedBoard(
+				stackedHeavyBaseBoard,
+				config.heavyTileThicknessValue,
+				shouldFlipStack,
+			);
 			const parts = range(adjustedStackCount).map((i) =>
-				heavyBoard.translate(0, 0, i * spacing),
+				stackedHeavyBoard.translate(0, 0, i * spacing),
 			);
 
 			if (
@@ -719,9 +833,11 @@ async function buildDirectModel(config) {
 				config.interfaceThicknessValue > 0 &&
 				adjustedStackCount > 1
 			) {
-				const interfaceLayer = heavyBoard
-					.slice(0)
-					.extrude(config.interfaceThicknessValue);
+				const interfaceLayer = buildTopInterfaceLayer(
+					stackedHeavyBoard,
+					config.interfaceThicknessValue,
+					config.heavyTileThicknessValue,
+				);
 				for (let i = 0; i < adjustedStackCount - 1; i++) {
 					parts.push(
 						interfaceLayer.translate(
