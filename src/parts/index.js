@@ -1,27 +1,44 @@
-import { OPEN_GRID_BOARD_PART } from "./opengrid-board/index.js";
+import { OPEN_GRID_BOARD_METADATA } from "./opengrid-board/metadata.js";
+import { UNDERWARE_METADATA } from "./underware/metadata.js";
 
-export const PART_DEFINITIONS = Object.freeze([OPEN_GRID_BOARD_PART]);
-export const DEFAULT_PART_ID = OPEN_GRID_BOARD_PART.id;
+export const PART_METADATA_DEFINITIONS = Object.freeze([
+	OPEN_GRID_BOARD_METADATA,
+	UNDERWARE_METADATA,
+]);
+export const DEFAULT_PART_ID = OPEN_GRID_BOARD_METADATA.id;
 
-const PARTS_BY_ID = new Map(PART_DEFINITIONS.map((part) => [part.id, part]));
+const PART_METADATA_BY_ID = new Map(
+	PART_METADATA_DEFINITIONS.map((metadata) => [metadata.id, metadata]),
+);
+const PART_LOAD_CACHE = new Map();
 
-export function getPartDefinition(partId = DEFAULT_PART_ID) {
-	return PARTS_BY_ID.get(partId) ?? PARTS_BY_ID.get(DEFAULT_PART_ID);
+export function getPartMetadata(partId = DEFAULT_PART_ID) {
+	return PART_METADATA_BY_ID.get(partId) ?? PART_METADATA_BY_ID.get(DEFAULT_PART_ID);
 }
 
 export function listPartMetadata() {
-	return PART_DEFINITIONS.map((part) => part.metadata);
+	return PART_METADATA_DEFINITIONS;
+}
+
+export async function loadPartDefinition(partId = DEFAULT_PART_ID) {
+	const metadata = getPartMetadata(partId);
+	if (!PART_LOAD_CACHE.has(metadata.id)) {
+		PART_LOAD_CACHE.set(metadata.id, Promise.resolve().then(() => metadata.load()));
+	}
+	return await PART_LOAD_CACHE.get(metadata.id);
 }
 
 export async function warmPartRenderer(partId = DEFAULT_PART_ID) {
-	await getPartDefinition(partId).renderer.warm();
+	const part = await loadPartDefinition(partId);
+	await part.renderer.warm();
 }
 
 export async function renderPartPreviewMesh(
 	partId = DEFAULT_PART_ID,
 	config,
 ) {
-	return await getPartDefinition(partId).renderer.renderPreviewMesh(config);
+	const part = await loadPartDefinition(partId);
+	return await part.renderer.renderPreviewMesh(config);
 }
 
 export async function renderPartExport(
@@ -29,5 +46,6 @@ export async function renderPartExport(
 	config,
 	format,
 ) {
-	return await getPartDefinition(partId).renderer.renderExport(config, format);
+	const part = await loadPartDefinition(partId);
+	return await part.renderer.renderExport(config, format);
 }

@@ -16,7 +16,11 @@ import {
 	createPreviewOptionClass,
 	createThemeOptionClass,
 } from "./ui-styles.js";
-import { DEFAULT_PART_ID, getPartDefinition } from "./parts/index.js";
+import {
+	DEFAULT_PART_ID,
+	getPartMetadata,
+	loadPartDefinition,
+} from "./parts/index.js";
 
 // --- Constants & Pure Utils ---
 
@@ -53,11 +57,6 @@ const SEGMENTS_MIN = 3;
 const COUNTERSINK_DEGREE_MIN = 1;
 const MOBILE_LAYOUT_BREAKPOINT = 1200;
 const MOBILE_LAYOUT_MEDIA_QUERY = `(max-width: ${MOBILE_LAYOUT_BREAKPOINT - 1}px)`;
-const EDITOR_2D_MIN_ZOOM = 0.35;
-const EDITOR_2D_MAX_ZOOM = 5;
-const EDITOR_2D_DRAG_THRESHOLD = 6;
-const EDITOR_2D_RESIZE_BUTTON_OFFSET = 20;
-const EDITOR_2D_INITIAL_MAX_TILE_PX = 88;
 const DEFAULT_CONFIG = createDefaultAppConfig(DEFAULT_PART_ID);
 
 function clamp(v, lo, hi) {
@@ -147,12 +146,13 @@ function buildRectangleMask(width, height) {
 }
 
 function createDefaultAppConfig(partId = DEFAULT_PART_ID) {
-	const resolvedPartId = getPartDefinition(partId).id;
+	const metadata = getPartMetadata(partId);
+	const resolvedPartId = metadata.id;
 	return {
 		themeMode: "auto",
 		exportFormat: "stl-binary",
 		partId: resolvedPartId,
-		...getPartDefinition(resolvedPartId).createDefaultConfig(),
+		...metadata.createDefaultConfig(),
 		width: 4,
 		height: 4,
 		top1Text: "0",
@@ -373,22 +373,6 @@ function nodeState(kind, raw) {
 	return "none";
 }
 
-function diamondPoints(x, y, r) {
-	return `${x},${y - r} ${x + r},${y} ${x},${y + r} ${x - r},${y}`;
-}
-
-function diamondPath(x, y, r) {
-	return `M ${x} ${y - r} L ${x + r} ${y} L ${x} ${y + r} L ${x - r} ${y} Z`;
-}
-
-function squareTile(x, y, size) {
-	return { x: x - size / 2, y: y - size / 2, w: size, h: size };
-}
-
-function rectPath(x, y, w, h) {
-	return `M ${x} ${y} H ${x + w} V ${y + h} H ${x} Z`;
-}
-
 function resizeMask(
 	oldGrid,
 	oldW,
@@ -507,7 +491,15 @@ export default function App() {
 	);
 	let workerRequestId = 0;
 	const pendingWorkerRequests = new Map();
-	const currentPart = $(() => getPartDefinition(activePartId.value));
+	const currentPartImplementation = signal(null);
+	const currentPartLoadError = signal("");
+	const currentEditor2D = signal(null);
+	let currentPartLoadVersion = 0;
+	const currentPart = $(() => {
+		const implementation = currentPartImplementation.value;
+		const activeId = activePartId.value;
+		return implementation?.id === activeId ? implementation : null;
+	});
 
 	exportWorker.onmessage = ({ data }) => {
 		const pending = pendingWorkerRequests.get(data.id);
@@ -523,6 +515,23 @@ export default function App() {
 			pending.reject(new Error(error));
 		pendingWorkerRequests.clear();
 	};
+
+	watch(() => {
+		const partId = activePartId.value;
+		const loadVersion = ++currentPartLoadVersion;
+		currentPartLoadError.value = "";
+		loadPartDefinition(partId)
+			.then((part) => {
+				if (loadVersion !== currentPartLoadVersion) return;
+				currentPartImplementation.value = part;
+			})
+			.catch((error) => {
+				if (loadVersion !== currentPartLoadVersion) return;
+				currentPartImplementation.value = null;
+				currentPartLoadError.value =
+					error instanceof Error ? error.message : "Failed to load part.";
+			});
+	});
 
 	const applyConfig = (config) => {
 		const defaults = createDefaultAppConfig(config.partId ?? activePartId.value);
@@ -724,7 +733,7 @@ export default function App() {
 	const previewConfigJson = $(() => JSON.stringify(exportConfig.value));
 	const exportText = $(() => {
 		const part = currentPart.value;
-		return part.buildExportText ? part.buildExportText(exportConfig.value) : "";
+		return part?.buildExportText ? part.buildExportText(exportConfig.value) : "";
 	});
 
 	const updateSize = (nextW, nextH, offsetX = 0, offsetY = 0) => {
@@ -883,7 +892,9 @@ export default function App() {
 		let objectUrl = null;
 
 		try {
-			const part = currentPart.value;
+			const part =
+				currentPart.value ?? (await loadPartDefinition(activePartId.value));
+			currentPartImplementation.value = part;
 			const config = exportConfig.value;
 			const format = exportFormat.value;
 			const formatMeta = getExportFormatMeta(format);
@@ -948,361 +959,41 @@ export default function App() {
 	};
 
 	const tileSize = 56;
-	const step = tileSize / 2;
 	const pad = 32;
-	const half = tileSize / 2;
 	const editor2DBoardMaterialClipId = "editor-2d-board-material-clip";
 	const editor2DNodeMaskId = "editor-2d-node-mask";
-	const editor2DZoom = signal(1);
-	const editor2DPanX = signal(0);
-	const editor2DPanY = signal(0);
-	const editor2DViewportWidth = signal(1);
-	const editor2DViewportHeight = signal(1);
-	const editor2DShowHint = signal(true);
-
-	let editor2DViewportEl = null;
-	let editor2DResizeObserver = null;
-	let editor2DPointerId = null;
-	let editor2DDragStartX = 0;
-	let editor2DDragStartY = 0;
-	let editor2DDragStartPanX = 0;
-	let editor2DDragStartPanY = 0;
-	let editor2DGestureStartZoom = 1;
-	let editor2DGestureStartPanX = 0;
-	let editor2DGestureStartPanY = 0;
-	let editor2DGestureStartDistance = 1;
-	let editor2DGestureStartCenterX = 0;
-	let editor2DGestureStartCenterY = 0;
-	const editor2DActiveTouches = new Map();
-	let editor2DPressedAction = null;
-	let editor2DIsDragging = false;
-	let editor2DGestureActive = false;
-	let editor2DHasManualNavigation = false;
-	const WEBKIT_EDITOR_2D_MAX_RASTER_SCALE = 2;
-
-	const svgW = $(() => width.value * tileSize + pad * 2);
-	const svgH = $(() => height.value * tileSize + pad * 2);
-	const boardW = $(() => width.value * tileSize);
-	const boardH = $(() => height.value * tileSize);
-	const get2DEditorDefaultScale = () => {
-		const contentWidth = Math.max(svgW.value, 1);
-		const contentHeight = Math.max(svgH.value, 1);
-		const viewportWidth = Math.max(editor2DViewportWidth.value, 1);
-		const viewportHeight = Math.max(editor2DViewportHeight.value, 1);
-		const fitScale = Math.min(
-			viewportWidth / contentWidth,
-			viewportHeight / contentHeight,
-		);
-		const cappedScale = EDITOR_2D_INITIAL_MAX_TILE_PX / tileSize;
-		return Math.min(fitScale, cappedScale);
-	};
-	const get2DEditorSceneFrame = (
-		zoom = editor2DZoom.value,
-		panX = editor2DPanX.value,
-		panY = editor2DPanY.value,
-	) => {
-		const contentWidth = svgW.value;
-		const contentHeight = svgH.value;
-		const viewportWidth = Math.max(editor2DViewportWidth.value, 1);
-		const viewportHeight = Math.max(editor2DViewportHeight.value, 1);
-		const nextZoom = clamp(zoom, EDITOR_2D_MIN_ZOOM, EDITOR_2D_MAX_ZOOM);
-		const scale = get2DEditorDefaultScale() * nextZoom;
-		const renderedWidth = contentWidth * scale;
-		const renderedHeight = contentHeight * scale;
-		const baseX = (viewportWidth - renderedWidth) / 2;
-		const baseY = (viewportHeight - renderedHeight) / 2;
-		const maxPanX =
-			renderedWidth > viewportWidth ? (renderedWidth - viewportWidth) / 2 : 0;
-		const maxPanY =
-			renderedHeight > viewportHeight ? (renderedHeight - viewportHeight) / 2 : 0;
-		const clampedPanX = clamp(panX, -maxPanX, maxPanX);
-		const clampedPanY = clamp(panY, -maxPanY, maxPanY);
-		return {
-			contentWidth,
-			contentHeight,
-			viewportWidth,
-			viewportHeight,
-			scale,
-			renderedWidth,
-			renderedHeight,
-			baseX,
-			baseY,
-			maxPanX,
-			maxPanY,
-			panX: clampedPanX,
-			panY: clampedPanY,
-			left: baseX + clampedPanX,
-			top: baseY + clampedPanY,
-		};
-	};
-	const set2DEditorView = (
-		zoom = editor2DZoom.value,
-		panX = editor2DPanX.value,
-		panY = editor2DPanY.value,
-	) => {
-		const nextZoom = clamp(zoom, EDITOR_2D_MIN_ZOOM, EDITOR_2D_MAX_ZOOM);
-		const frame = get2DEditorSceneFrame(nextZoom, panX, panY);
-		editor2DZoom.value = nextZoom;
-		editor2DPanX.value = frame.panX;
-		editor2DPanY.value = frame.panY;
-	};
-	const fit2DEditorInitialView = () => {
-		if (editor2DViewportWidth.value <= 1 || editor2DViewportHeight.value <= 1)
-			return;
-		set2DEditorView(1, 0, 0);
-	};
-	const set2DEditorViewFromAnchor = ({
-		nextZoom,
-		anchorClientX,
-		anchorClientY,
-		targetClientX = anchorClientX,
-		targetClientY = anchorClientY,
-		baseZoom = editor2DZoom.value,
-		basePanX = editor2DPanX.value,
-		basePanY = editor2DPanY.value,
-	}) => {
-		if (!editor2DViewportEl) {
-			set2DEditorView(nextZoom, basePanX, basePanY);
-			return;
-		}
-		const rect = editor2DViewportEl.getBoundingClientRect();
-		const anchorX = anchorClientX - rect.left;
-		const anchorY = anchorClientY - rect.top;
-		const targetX = targetClientX - rect.left;
-		const targetY = targetClientY - rect.top;
-		const sourceFrame = get2DEditorSceneFrame(baseZoom, basePanX, basePanY);
-		const worldX = (anchorX - sourceFrame.left) / Math.max(sourceFrame.scale, 0.0001);
-		const worldY = (anchorY - sourceFrame.top) / Math.max(sourceFrame.scale, 0.0001);
-		const nextFrame = get2DEditorSceneFrame(nextZoom, 0, 0);
-		set2DEditorView(
-			nextZoom,
-			targetX - nextFrame.baseX - worldX * nextFrame.scale,
-			targetY - nextFrame.baseY - worldY * nextFrame.scale,
-		);
-	};
-	const update2DEditorViewportSize = () => {
-		if (!editor2DViewportEl) return;
-		const rect = editor2DViewportEl.getBoundingClientRect();
-		editor2DViewportWidth.value = Math.max(1, Math.floor(rect.width));
-		editor2DViewportHeight.value = Math.max(1, Math.floor(rect.height));
-	};
-	const attach2DEditorViewport = (el) => {
-		editor2DViewportEl = el;
-		editor2DResizeObserver?.disconnect();
-		editor2DResizeObserver = null;
-
-		if (el && typeof ResizeObserver !== "undefined") {
-			editor2DResizeObserver = new ResizeObserver(update2DEditorViewportSize);
-			editor2DResizeObserver.observe(el);
-			queueMicrotask(update2DEditorViewportSize);
-		}
-	};
-	const begin2DEditorTouchGesture = () => {
-		const points = [...editor2DActiveTouches.values()];
-		if (points.length < 2) return;
-		const [a, b] = points;
-		editor2DGestureStartZoom = editor2DZoom.value;
-		editor2DGestureStartPanX = editor2DPanX.value;
-		editor2DGestureStartPanY = editor2DPanY.value;
-		editor2DGestureStartDistance = Math.max(
-			1,
-			Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
-		);
-		editor2DGestureStartCenterX = (a.clientX + b.clientX) / 2;
-		editor2DGestureStartCenterY = (a.clientY + b.clientY) / 2;
-	};
-	const update2DEditorTouchGesture = () => {
-		const points = [...editor2DActiveTouches.values()];
-		if (points.length < 2) return;
-		const [a, b] = points;
-		const centerX = (a.clientX + b.clientX) / 2;
-		const centerY = (a.clientY + b.clientY) / 2;
-		const nextZoom =
-			editor2DGestureStartZoom *
-			(Math.max(1, Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)) /
-				editor2DGestureStartDistance);
-		set2DEditorViewFromAnchor({
-			nextZoom,
-			anchorClientX: editor2DGestureStartCenterX,
-			anchorClientY: editor2DGestureStartCenterY,
-			targetClientX: centerX,
-			targetClientY: centerY,
-			baseZoom: editor2DGestureStartZoom,
-			basePanX: editor2DGestureStartPanX,
-			basePanY: editor2DGestureStartPanY,
-		});
-	};
-	const editor2DViewportViewBox = $(
-		() =>
-			`0 0 ${Math.max(editor2DViewportWidth.value, 1)} ${Math.max(
-				editor2DViewportHeight.value,
-				1,
-			)}`,
-	);
-	const editor2DSceneViewBox = $(() => `0 0 ${svgW.value} ${svgH.value}`);
-	const editor2DSceneFrame = $(() =>
-		get2DEditorSceneFrame(
-			editor2DZoom.value,
-			editor2DPanX.value,
-			editor2DPanY.value,
-		),
-	);
-	const editor2DUseCssTransformPath = isWebKitEngine;
-	const editor2DSvgRasterScale = $(() => {
-		if (!editor2DUseCssTransformPath.value) return 1;
-		return clamp(
-			Math.ceil(editor2DSceneFrame.value.scale),
-			1,
-			WEBKIT_EDITOR_2D_MAX_RASTER_SCALE,
-		);
-	});
-	const editor2DSceneTransform = $(() => {
-		if (editor2DUseCssTransformPath.value) return undefined;
-		const frame = editor2DSceneFrame.value;
-		return `translate(${frame.left} ${frame.top}) scale(${frame.scale})`;
-	});
-	const editor2DSvgClass = $(() =>
-		editor2DUseCssTransformPath.value
-			? "absolute left-0 top-0 block max-w-none overflow-visible"
-			: "block h-full w-full",
-	);
-	const editor2DSvgStyle = $(() => {
-		if (!editor2DUseCssTransformPath.value) return "background: transparent;";
-		const frame = editor2DSceneFrame.value;
-		return `background: transparent; transform: translate3d(${frame.left}px, ${frame.top}px, 0) scale(${frame.scale / editor2DSvgRasterScale.value}); transform-origin: 0 0; will-change: transform;`;
-	});
-	const editor2DSvgViewBox = $(() =>
-		editor2DUseCssTransformPath.value
-			? editor2DSceneViewBox.value
-			: editor2DViewportViewBox.value,
-	);
-	const editor2DSvgPreserveAspectRatio = $(() =>
-		editor2DUseCssTransformPath.value ? undefined : "none",
-	);
-	const editor2DSvgWidth = $(() =>
-		editor2DUseCssTransformPath.value
-			? Math.max(1, Math.ceil(svgW.value * editor2DSvgRasterScale.value))
-			: undefined,
-	);
-	const editor2DSvgHeight = $(() =>
-		editor2DUseCssTransformPath.value
-			? Math.max(1, Math.ceil(svgH.value * editor2DSvgRasterScale.value))
-			: undefined,
-	);
 	const editor2DBackgroundStyle = $(() =>
 		resolvedTheme.value === "dark"
 			? "background: linear-gradient(180deg, #0f172a 0%, #020617 100%);"
 			: "background: linear-gradient(180deg, #f8fafc 0%, #dbeafe 100%);",
 	);
-	const editor2DBoardFill = $(() =>
-		resolvedTheme.value === "dark" ? "#f8fafc" : "#000000",
-	);
-	const editor2DResizeButtonFill = $(() =>
-		resolvedTheme.value === "dark" ? "#0f172a" : "#ffffff",
-	);
-	const editor2DResizeButtonStroke = $(() =>
-		resolvedTheme.value === "dark" ? "#334155" : "#cbd5e1",
-	);
-	const editor2DResizeButtonText = $(() =>
-		resolvedTheme.value === "dark" ? "#e2e8f0" : "#334155",
-	);
-	const editor2DControlInset = pad / 2 - 6;
-	const editor2DTopControlY = editor2DControlInset;
-	const editor2DLeftControlX = editor2DControlInset;
-	const editor2DRightControlX = $(() => svgW.value - editor2DControlInset);
-	const editor2DBottomControlY = $(() => svgH.value - editor2DControlInset);
-	const editor2DCenterX = $(() => svgW.value / 2);
-	const editor2DCenterY = $(() => svgH.value / 2);
-	const editor2DTopAddX = $(() => editor2DCenterX.value - EDITOR_2D_RESIZE_BUTTON_OFFSET);
-	const editor2DTopRemoveX = $(() => editor2DCenterX.value + EDITOR_2D_RESIZE_BUTTON_OFFSET);
-	const editor2DBottomAddX = $(() => editor2DCenterX.value - EDITOR_2D_RESIZE_BUTTON_OFFSET);
-	const editor2DBottomRemoveX = $(() => editor2DCenterX.value + EDITOR_2D_RESIZE_BUTTON_OFFSET);
-	const editor2DLeftAddY = $(() => editor2DCenterY.value - EDITOR_2D_RESIZE_BUTTON_OFFSET);
-	const editor2DLeftRemoveY = $(() => editor2DCenterY.value + EDITOR_2D_RESIZE_BUTTON_OFFSET);
-	const editor2DRightAddY = $(() => editor2DCenterY.value - EDITOR_2D_RESIZE_BUTTON_OFFSET);
-	const editor2DRightRemoveY = $(() => editor2DCenterY.value + EDITOR_2D_RESIZE_BUTTON_OFFSET);
-	const editor2DHintClass = $(() =>
-		isMobileLayout.value
-			? "pointer-events-none absolute left-1/2 top-4 z-10 w-[min(calc(100%-2rem),320px)] -translate-x-1/2 rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-center text-[11px] font-medium text-slate-500 backdrop-blur dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-400"
-			: "pointer-events-none absolute right-4 bottom-4 z-10 rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-[11px] font-medium text-slate-500 backdrop-blur dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-400",
-	);
-
-	const toNodeXY = (gx, gy) => ({ x: pad + gx * step, y: pad + gy * step });
-
-	const tiles = $(() => {
-		const items = [];
-		for (let ty = 0; ty < height.value; ty++) {
-			for (let tx = 0; tx < width.value; tx++) {
-				const { gx, gy } = tileCoordToGrid(tx, ty);
-				items.push({ id: `${gx}-${gy}`, tx, ty, gx, gy });
-			}
-		}
-		return items;
-	});
-
-	const nodes = $(() => {
-		const items = [];
-		const { gw, gh } = gridSize(width.value, height.value);
-		const nodeKind = topo.value.nodeKind;
-		if (!nodeKind) return items;
-
-		for (let gy = 0; gy < gh; gy++) {
-			const row = nodeKind[gy];
-			if (!row) continue;
-			for (let gx = 0; gx < gw; gx++) {
-				if (isNodePos(gx, gy)) {
-					const kind = row[gx];
-					if (kind !== "none" && kind !== "used") {
-						items.push({ id: `${gx}-${gy}`, gx, gy });
-					}
-				}
-			}
-		}
-		return items;
-	});
-	const editor2DBoardMaterialPath = $(() => {
-		const parts = [];
-		for (const { tx, ty, gx, gy } of tiles.value) {
-			if (!tileFill(getMask(maskGrid.value, gx, gy))) continue;
-			const x = pad + tx * tileSize + half;
-			const y = pad + ty * tileSize + half;
-			const sq = squareTile(x, y, tileSize);
-			parts.push(rectPath(sq.x, sq.y, sq.w, sq.h));
-		}
-		for (const { gx, gy } of nodes.value) {
-			const kind = topo.value.nodeKind[gy]?.[gx] ?? "none";
-			if (kind !== "inner" && kind !== "diag") continue;
-			const { x, y } = toNodeXY(gx, gy);
-			parts.push(diamondPath(x, y, 13));
-		}
-		return parts.join(" ");
-	});
-	const editor2DActiveTileInsetPath = $(() => {
-		const parts = [];
-		const border = 3;
-		for (const { tx, ty, gx, gy } of tiles.value) {
-			if (!tileFill(getMask(maskGrid.value, gx, gy))) continue;
-			const x = pad + tx * tileSize + half;
-			const y = pad + ty * tileSize + half;
-			const sq = squareTile(x, y, tileSize);
-			parts.push(
-				rectPath(
-					sq.x + border,
-					sq.y + border,
-					sq.w - border * 2,
-					sq.h - border * 2,
-				),
-			);
-		}
-		return parts.join(" ");
-	});
-	const editor2DNodeOverlayPath = $(() => {
-		const parts = [];
-		for (const { gx, gy } of nodes.value) {
-			const { x, y } = toNodeXY(gx, gy);
-			parts.push(diamondPath(x, y, 13));
-		}
-		return parts.join(" ");
+	const editor2DViewportContext = Object.freeze({
+		signals: Object.freeze({
+			width,
+			height,
+			maskGrid,
+			topo,
+			resolvedTheme,
+			isMobileLayout,
+		}),
+		helpers: Object.freeze({
+			gridSize,
+			tileCoordToGrid,
+			isNodePos,
+			getMask,
+			tileFill,
+			nodeState,
+		}),
+		constants: Object.freeze({
+			pad,
+			tileSize,
+			editor2DBoardMaterialClipId,
+			editor2DNodeMaskId,
+		}),
+		actions: Object.freeze({
+			readAction: read2DEditorAction,
+			performAction: perform2DEditorAction,
+		}),
 	});
 
 	const themeOptionClass = (mode) => createThemeOptionClass(themeMode, mode);
@@ -1318,6 +1009,31 @@ export default function App() {
 	const editor2DViewportStyle = createEditor2DViewportStyle(isMobileLayout);
 	const exportMenuItemClass = (format) =>
 		createExportMenuItemClass(exportFormat, format);
+	const baseEditor2DViewportProps = Object.freeze({
+		backgroundStyle: editor2DBackgroundStyle,
+		viewportClass: editor2DViewportClass,
+		viewportStyle: editor2DViewportStyle,
+		baseTileSize: tileSize,
+		isWebKitEngine,
+	});
+
+	watch(() => {
+		const editor = currentPart.value?.editors?.preview2D;
+		if (!editor?.create) {
+			currentEditor2D.value = null;
+			return;
+		}
+
+		const nextEditor = editor.create(editor2DViewportContext);
+		currentEditor2D.value = Object.freeze({
+			...nextEditor,
+			viewportProps: Object.freeze({
+				...baseEditor2DViewportProps,
+				sceneWidth: nextEditor.scene.svgW,
+				sceneHeight: nextEditor.scene.svgH,
+			}),
+		});
+	});
 
 	let previewTimer = null;
 	let previewSequence = 0;
@@ -1396,187 +1112,6 @@ export default function App() {
 	};
 	document.addEventListener("pointerdown", onPointerDown);
 	onDispose(() => document.removeEventListener("pointerdown", onPointerDown));
-	onDispose(() => editor2DResizeObserver?.disconnect());
-
-	watch(() => {
-		const frame = get2DEditorSceneFrame(
-			editor2DZoom.value,
-			editor2DPanX.value,
-			editor2DPanY.value,
-		);
-		if (frame.panX !== editor2DPanX.value) editor2DPanX.value = frame.panX;
-		if (frame.panY !== editor2DPanY.value) editor2DPanY.value = frame.panY;
-	});
-	watch(() => {
-		editor2DViewportWidth.value;
-		editor2DViewportHeight.value;
-		svgW.value;
-		svgH.value;
-		if (!editor2DHasManualNavigation) fit2DEditorInitialView();
-	});
-
-	const start2DEditorPointerSession = (pointerId, clientX, clientY, action) => {
-		editor2DPointerId = pointerId;
-		editor2DDragStartX = clientX;
-		editor2DDragStartY = clientY;
-		editor2DDragStartPanX = editor2DPanX.value;
-		editor2DDragStartPanY = editor2DPanY.value;
-		editor2DPressedAction = action;
-		editor2DIsDragging = false;
-		if (editor2DViewportEl) editor2DViewportEl.style.cursor = "grabbing";
-	};
-
-	const finish2DEditorPointerSession = () => {
-		editor2DPointerId = null;
-		editor2DPressedAction = null;
-		editor2DIsDragging = false;
-		if (editor2DViewportEl) editor2DViewportEl.style.cursor = "grab";
-	};
-
-	const on2DEditorPointerDown = (event) => {
-		editor2DShowHint.value = false;
-		const action = read2DEditorAction(event.target);
-
-		if (event.pointerType === "touch") {
-			editor2DActiveTouches.set(event.pointerId, {
-				pointerId: event.pointerId,
-				clientX: event.clientX,
-				clientY: event.clientY,
-			});
-			event.currentTarget?.setPointerCapture?.(event.pointerId);
-			if (editor2DActiveTouches.size >= 2) {
-				editor2DPressedAction = null;
-				editor2DGestureActive = true;
-				editor2DHasManualNavigation = true;
-				begin2DEditorTouchGesture();
-				return;
-			}
-			editor2DGestureActive = false;
-			start2DEditorPointerSession(
-				event.pointerId,
-				event.clientX,
-				event.clientY,
-				action,
-			);
-			return;
-		}
-
-		if (event.button > 2) return;
-
-		event.preventDefault();
-		start2DEditorPointerSession(
-			event.pointerId,
-			event.clientX,
-			event.clientY,
-			action,
-		);
-		event.currentTarget?.setPointerCapture?.(event.pointerId);
-	};
-
-	const on2DEditorPointerMove = (event) => {
-		if (event.pointerType === "touch") {
-			if (!editor2DActiveTouches.has(event.pointerId)) return;
-			editor2DActiveTouches.set(event.pointerId, {
-				pointerId: event.pointerId,
-				clientX: event.clientX,
-				clientY: event.clientY,
-			});
-			if (editor2DActiveTouches.size >= 2) {
-				editor2DPressedAction = null;
-				editor2DGestureActive = true;
-				editor2DHasManualNavigation = true;
-				update2DEditorTouchGesture();
-				return;
-			}
-
-			if (event.pointerId !== editor2DPointerId) return;
-			const dx = event.clientX - editor2DDragStartX;
-			const dy = event.clientY - editor2DDragStartY;
-			if (
-				!editor2DIsDragging &&
-				Math.hypot(dx, dy) < EDITOR_2D_DRAG_THRESHOLD
-			) {
-				return;
-			}
-			editor2DIsDragging = true;
-			editor2DHasManualNavigation = true;
-			editor2DPressedAction = null;
-			set2DEditorView(
-				editor2DZoom.value,
-				editor2DDragStartPanX + dx,
-				editor2DDragStartPanY + dy,
-			);
-			return;
-		}
-
-		if (event.pointerId !== editor2DPointerId) return;
-		const dx = event.clientX - editor2DDragStartX;
-		const dy = event.clientY - editor2DDragStartY;
-		if (
-			!editor2DIsDragging &&
-			Math.hypot(dx, dy) < EDITOR_2D_DRAG_THRESHOLD
-		) {
-			return;
-		}
-		editor2DIsDragging = true;
-		editor2DHasManualNavigation = true;
-		editor2DPressedAction = null;
-		set2DEditorView(
-			editor2DZoom.value,
-			editor2DDragStartPanX + dx,
-			editor2DDragStartPanY + dy,
-		);
-	};
-
-	const on2DEditorPointerFinish = (event) => {
-		if (event.pointerType === "touch") {
-			editor2DActiveTouches.delete(event.pointerId);
-			event.currentTarget?.releasePointerCapture?.(event.pointerId);
-			if (
-				event.pointerId === editor2DPointerId &&
-				!editor2DGestureActive &&
-				!editor2DIsDragging
-			) {
-				perform2DEditorAction(editor2DPressedAction);
-			}
-			if (editor2DActiveTouches.size >= 2) {
-				editor2DPressedAction = null;
-				editor2DGestureActive = true;
-				begin2DEditorTouchGesture();
-				return;
-			}
-			if (editor2DActiveTouches.size === 1) {
-				const [remainingPoint] = editor2DActiveTouches.values();
-				editor2DGestureActive = false;
-				start2DEditorPointerSession(
-					remainingPoint.pointerId,
-					remainingPoint.clientX,
-					remainingPoint.clientY,
-					null,
-				);
-				return;
-			}
-			editor2DGestureActive = false;
-			finish2DEditorPointerSession();
-			return;
-		}
-
-		if (event.pointerId !== editor2DPointerId) return;
-		if (!editor2DIsDragging) perform2DEditorAction(editor2DPressedAction);
-		finish2DEditorPointerSession();
-		event.currentTarget?.releasePointerCapture?.(event.pointerId);
-	};
-
-	const on2DEditorWheel = (event) => {
-		event.preventDefault();
-		editor2DShowHint.value = false;
-		editor2DHasManualNavigation = true;
-		set2DEditorViewFromAnchor({
-			nextZoom: editor2DZoom.value * Math.exp(-event.deltaY * 0.0015),
-			anchorClientX: event.clientX,
-			anchorClientY: event.clientY,
-		});
-	};
 
 	const configPanelClass = createConfigPanelClass(
 		isMobileLayout,
@@ -1611,9 +1146,8 @@ export default function App() {
 		previewOptionClass,
 		previewMode,
 	};
-	const editor2DComponentKey = $(
-		() => currentPart.value.editors?.preview2D?.Component ? currentPart.value.id : "",
-	);
+	const paneError = $(() => exportError.value || currentPartLoadError.value);
+	const editor2DKey = $(() => (currentEditor2D.value ? activePartId.value : ""));
 	const configPanelProps = {
 		themeControls,
 		classes: {
@@ -1669,61 +1203,10 @@ export default function App() {
 			clearConfiguration,
 		},
 	};
-	const openGridBoardEditor2DProps = {
-		editor2DBackgroundStyle,
-		editor2DViewportClass,
-		editor2DViewportStyle,
-		attach2DEditorViewport,
-		on2DEditorPointerDown,
-		on2DEditorPointerMove,
-		on2DEditorPointerFinish,
-		on2DEditorWheel,
-		editor2DSvgViewBox,
-		editor2DSvgPreserveAspectRatio,
-		editor2DSvgWidth,
-		editor2DSvgHeight,
-		editor2DSvgClass,
-		editor2DSvgStyle,
-		editor2DBoardMaterialClipId,
-		editor2DNodeMaskId,
-		editor2DBoardMaterialPath,
-		editor2DActiveTileInsetPath,
-		editor2DNodeOverlayPath,
-		editor2DBoardFill,
-		editor2DSceneTransform,
-		tiles,
-		nodes,
-		toNodeXY,
-		topo,
-		maskGrid,
-		getMask,
-		nodeState,
-		svgW,
-		svgH,
-		pad,
-		tileSize,
-		editor2DResizeButtonFill,
-		editor2DResizeButtonStroke,
-		editor2DResizeButtonText,
-		editor2DTopAddX,
-		editor2DTopRemoveX,
-		editor2DLeftControlX,
-		editor2DLeftAddY,
-		editor2DLeftRemoveY,
-		editor2DRightControlX,
-		editor2DRightAddY,
-		editor2DRightRemoveY,
-		editor2DBottomAddX,
-		editor2DBottomRemoveX,
-		editor2DTopControlY,
-		editor2DBottomControlY,
-		editor2DShowHint,
-		editor2DHintClass,
-	};
 	const previewPaneProps = {
 		showAboutModal,
 		openConfigPanel,
-		exportError,
+		exportError: paneError,
 		isMobileLayout,
 		isDesktopLayout,
 		previewMode,
@@ -1731,10 +1214,8 @@ export default function App() {
 		previewLoading,
 		previewError,
 		resolvedTheme,
-		editor2DComponentKey,
-		resolveEditor2DComponent: () =>
-			currentPart.value.editors?.preview2D?.Component ?? null,
-		editor2DProps: openGridBoardEditor2DProps,
+		editor2DKey,
+		resolveEditor2D: () => currentEditor2D.value,
 	};
 	const copyModalProps = {
 		showModal,
