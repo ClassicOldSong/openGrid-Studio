@@ -1,4 +1,5 @@
 import { createOpenGridBoardEditor2D } from "./editor2d.js";
+import { createOpenGridBoardDefaultConfig } from "./default-config.js";
 import {
 	buildOpenGridBoardEntryScad,
 	buildOpenGridBoardExportFilename,
@@ -18,7 +19,7 @@ export const OPEN_GRID_BOARD_PART = Object.freeze({
 		exportFormats: ["stl-binary", "stl-ascii", "3mf"],
 		textExport: "scad",
 	}),
-	createDefaultConfig: OPEN_GRID_BOARD_METADATA.createDefaultConfig,
+	createDefaultConfig: createOpenGridBoardDefaultConfig,
 	buildExportText: buildOpenGridBoardEntryScad,
 	buildExportFilename: buildOpenGridBoardExportFilename,
 	editors: Object.freeze({

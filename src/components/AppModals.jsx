@@ -71,7 +71,7 @@ export function CopyScadModal({ modal }) {
 }
 
 export function AboutModal({ modal }) {
-	const { showAboutModal, close } = modal;
+	const { showAboutModal, partCredits = [], close } = modal;
 
 	return (
 		<If condition={showAboutModal}>
@@ -168,6 +168,28 @@ export function AboutModal({ modal }) {
 									</a>
 								</p>
 							</div>
+							<If condition={partCredits.length > 0}>
+								{() => (
+									<div class="grid gap-2">
+										<div class="text-xs font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-slate-500">
+											Part Credits
+										</div>
+										{partCredits.map((part) => (
+											<p>
+												{part.name}: {part.credit.label}.{" "}
+												<a
+													class="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200"
+													href={part.credit.url}
+													target="_blank"
+													rel="noreferrer"
+												>
+													{part.credit.url.replace(/^https?:\/\//, "")}
+												</a>
+											</p>
+										))}
+									</div>
+								)}
+							</If>
 						</div>
 						<div class="p-6 border-t border-gray-200 flex justify-end dark:border-slate-800">
 							<button class={MODAL_PRIMARY_ACTION_CLASS} on:click={close}>

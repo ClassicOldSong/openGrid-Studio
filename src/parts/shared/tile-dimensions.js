@@ -4,6 +4,7 @@ export const DEFAULT_TILE_DIMENSIONS = Object.freeze({
 	liteTileThicknessValue: 4,
 	heavyTileThicknessValue: 13.8,
 	heavyTileGapValue: 0.2,
+	circleSegmentsValue: 128,
 });
 
 export function createDefaultTileDimensions() {

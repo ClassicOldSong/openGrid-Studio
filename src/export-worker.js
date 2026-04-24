@@ -1,21 +1,21 @@
 import {
-	DEFAULT_PART_ID,
-	renderPartExport,
-	renderPartPreviewMesh,
-	warmPartRenderer,
-} from "./parts/index.js";
+	DEFAULT_WORKER_PART_ID,
+	renderWorkerPartExport,
+	renderWorkerPartPreviewMesh,
+	warmWorkerPartRenderer,
+} from "./parts/worker.js";
 
 self.onmessage = async ({ data }) => {
-	const partId = data?.partId ?? DEFAULT_PART_ID;
+	const partId = data?.partId ?? DEFAULT_WORKER_PART_ID;
 
 	if (data?.type === 'warmup') {
-		await Promise.allSettled([warmPartRenderer(partId)])
+		await Promise.allSettled([warmWorkerPartRenderer(partId)])
 		return
 	}
 
 	if (data?.type === 'preview-mesh') {
 		try {
-			const preview = await renderPartPreviewMesh(partId, data.config)
+			const preview = await renderWorkerPartPreviewMesh(partId, data.config)
 			self.postMessage(
 				{
 					id: data.id,
@@ -36,7 +36,7 @@ self.onmessage = async ({ data }) => {
 
 	try {
 		if (!data.config) throw new Error('No export configuration provided.')
-		const rendered = await renderPartExport(
+		const rendered = await renderWorkerPartExport(
 			partId,
 			data.config,
 			data?.type === 'render-stl' ? 'stl-binary' : data.format,

@@ -1,6 +1,12 @@
+import { buildRectangleMask } from "./model.js";
 import { createDefaultTileDimensions } from "../shared/tile-dimensions.js";
 
 export const OPEN_GRID_BOARD_DEFAULT_CONFIG = Object.freeze({
+	width: 4,
+	height: 4,
+	top1Text: "0",
+	top2Text: "0",
+	maskGrid: buildRectangleMask(4, 4),
 	fullOrLite: "Full",
 	...createDefaultTileDimensions(),
 	addAdhesiveBase: false,
@@ -19,9 +25,11 @@ export const OPEN_GRID_BOARD_DEFAULT_CONFIG = Object.freeze({
 	stackingMethod: "Interface Layer",
 	interfaceThicknessValue: 0.4,
 	interfaceSeparationValue: 0.1,
-	circleSegmentsValue: 64,
 });
 
 export function createOpenGridBoardDefaultConfig() {
-	return { ...OPEN_GRID_BOARD_DEFAULT_CONFIG };
+	return {
+		...OPEN_GRID_BOARD_DEFAULT_CONFIG,
+		maskGrid: OPEN_GRID_BOARD_DEFAULT_CONFIG.maskGrid.map((row) => [...row]),
+	};
 }

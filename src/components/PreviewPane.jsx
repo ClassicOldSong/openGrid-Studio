@@ -64,14 +64,16 @@ export default function PreviewPane({ pane, controls }) {
 							{() => <PreviewModeSwitcher controls={controls.previewMode} />}
 						</If>
 					</div>
-					<If condition={isDesktopLayout}>
-						{() => (
-							<div class="flex w-full flex-wrap gap-2 items-center sm:w-auto sm:justify-end">
-								<ThemeSwitcher controls={controls.theme} />
-								<DownloadActions controls={controls.download} />
-							</div>
-						)}
-					</If>
+						<If condition={isDesktopLayout}>
+							{() => (
+								<div class="flex w-full flex-wrap gap-2 items-center sm:w-auto sm:justify-end">
+									<ThemeSwitcher controls={controls.theme} />
+									<If condition={controls.download.available}>
+										{() => <DownloadActions controls={controls.download} />}
+									</If>
+								</div>
+							)}
+						</If>
 				</div>
 			</div>
 			<If condition={exportError}>
@@ -109,7 +111,11 @@ export default function PreviewPane({ pane, controls }) {
 				{() => <PreviewModeSwitcher mobile controls={controls.previewMode} />}
 			</If>
 			<If condition={isMobileLayout}>
-				{() => <DownloadActions mobile controls={controls.download} />}
+				{() => (
+					<If condition={controls.download.available}>
+						{() => <DownloadActions mobile controls={controls.download} />}
+					</If>
+				)}
 			</If>
 		</div>
 	);

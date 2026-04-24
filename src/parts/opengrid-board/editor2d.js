@@ -16,8 +16,11 @@ function rectPath(x, y, w, h) {
 }
 
 export function createOpenGridBoardEditor2D(context) {
-	const { signals, helpers, constants, actions } = context;
-	const { width, height, maskGrid, topo, resolvedTheme, isMobileLayout } = signals;
+	const { app, partController } = context;
+	const { constants, signals: appSignals } = app;
+	const { resolvedTheme, isMobileLayout } = appSignals;
+	const { signals, helpers, editorActions: openGridActions } = partController;
+	const { width, height, maskGrid, topo } = signals;
 	const {
 		gridSize,
 		tileCoordToGrid,
@@ -31,7 +34,7 @@ export function createOpenGridBoardEditor2D(context) {
 		tileSize,
 		editor2DBoardMaterialClipId,
 		editor2DNodeMaskId,
-	} = constants;
+	} = constants.editor2D;
 
 	const step = tileSize / 2;
 	const half = tileSize / 2;
@@ -251,6 +254,6 @@ export function createOpenGridBoardEditor2D(context) {
 					: "pointer-events-none absolute right-4 bottom-4 z-10 rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-[11px] font-medium text-slate-500 backdrop-blur dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-400",
 			),
 		}),
-		actions,
+		actions: openGridActions,
 	});
 }

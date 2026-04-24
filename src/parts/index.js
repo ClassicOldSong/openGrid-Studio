@@ -1,9 +1,9 @@
 import { OPEN_GRID_BOARD_METADATA } from "./opengrid-board/metadata.js";
-import { UNDERWARE_METADATA } from "./underware/metadata.js";
+import { PIPEWARE_METADATA } from "./pipeware/metadata.js";
 
 export const PART_METADATA_DEFINITIONS = Object.freeze([
 	OPEN_GRID_BOARD_METADATA,
-	UNDERWARE_METADATA,
+	PIPEWARE_METADATA,
 ]);
 export const DEFAULT_PART_ID = OPEN_GRID_BOARD_METADATA.id;
 

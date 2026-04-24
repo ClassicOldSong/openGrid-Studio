@@ -1,4 +1,4 @@
-import { $ } from "refui";
+import { $, For, If } from "refui";
 import {
 	EXPORT_MENU_ABOVE_CLASS,
 	EXPORT_MENU_CLASS,
@@ -55,17 +55,25 @@ export function ThemeSwitcher({ mobile = false, controls }) {
 
 export function DownloadActions({ mobile = false, controls }) {
 	const {
+		canCopyTextExport,
 		mobileFloatingRightStyle,
 		exportButtonClass,
 		downloadExport,
 		exportInFlight,
-		exportFormatLabel,
+		exportFormat,
 		exportDropdownButtonClass,
 		exportMenuItemClass,
 		openCopyScadFromMenu,
 		chooseExportFormat,
 		exportFormatOptions,
 	} = controls;
+	const downloadLabel = $(() => {
+		const selected =
+			exportFormatOptions.value.find(
+				(option) => option.value === exportFormat.value,
+			) ?? exportFormatOptions.value[0];
+		return selected?.label ?? "Export";
+	});
 
 	return (
 		<div
@@ -79,8 +87,8 @@ export function DownloadActions({ mobile = false, controls }) {
 			>
 				{$(() =>
 					exportInFlight.value
-						? `Rendering ${exportFormatLabel.value}...`
-						: `Download ${exportFormatLabel.value}`,
+						? `Rendering ${downloadLabel.value}...`
+						: `Download ${downloadLabel.value}`,
 				)}
 			</button>
 			<details class="js-export-menu relative">
@@ -94,20 +102,26 @@ export function DownloadActions({ mobile = false, controls }) {
 					</svg>
 				</summary>
 				<div class={mobile ? EXPORT_MENU_ABOVE_CLASS : EXPORT_MENU_CLASS}>
-					<button
-						class={exportMenuItemClass("__copy_scad__")}
-						on:click={openCopyScadFromMenu}
-					>
-						Copy SCAD
-					</button>
-					{exportFormatOptions.map((option) => (
-						<button
-							class={exportMenuItemClass(option.value)}
-							on:click={(event) => chooseExportFormat(option.value, event)}
-						>
-							{option.label}
-						</button>
-					))}
+					<If condition={canCopyTextExport}>
+						{() => (
+							<button
+								class={exportMenuItemClass("__copy_scad__")}
+								on:click={openCopyScadFromMenu}
+							>
+								Copy SCAD
+							</button>
+						)}
+					</If>
+					<For entries={exportFormatOptions} track="value">
+						{({ item: option }) => (
+							<button
+								class={exportMenuItemClass(option.value)}
+								on:click={(event) => chooseExportFormat(option.value, event)}
+							>
+								{option.label}
+							</button>
+						)}
+					</For>
 				</div>
 			</details>
 		</div>
@@ -115,7 +129,8 @@ export function DownloadActions({ mobile = false, controls }) {
 }
 
 export function PreviewModeSwitcher({ mobile = false, controls }) {
-	const { mobileFloatingLeftStyle, previewOptionClass, previewMode } = controls;
+	const { mobileFloatingLeftStyle, previewOptionClass, previewMode, show3D } =
+		controls;
 
 	return (
 		<div
@@ -129,12 +144,16 @@ export function PreviewModeSwitcher({ mobile = false, controls }) {
 				>
 					2D
 				</button>
-				<button
-					class={previewOptionClass("3d")}
-					on:click={() => (previewMode.value = "3d")}
-				>
-					3D
-				</button>
+				<If condition={show3D}>
+					{() => (
+						<button
+							class={previewOptionClass("3d")}
+							on:click={() => (previewMode.value = "3d")}
+						>
+							3D
+						</button>
+					)}
+				</If>
 			</div>
 		</div>
 	);

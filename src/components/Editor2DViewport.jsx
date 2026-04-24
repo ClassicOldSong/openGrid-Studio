@@ -20,11 +20,13 @@ export default function Editor2DViewport({ viewport, editor }) {
 					class="absolute inset-0 cursor-grab select-none"
 					style="touch-action: none;"
 					$ref={navigation.attachViewport}
-					on:contextmenu={(event) => event.preventDefault()}
+					on:auxclick={navigation.onAuxClick}
+					on:contextmenu={navigation.onContextMenu}
 					on:pointerdown={navigation.onPointerDown}
 					on:pointermove={navigation.onPointerMove}
 					on:pointerup={navigation.onPointerFinish}
 					on:pointercancel={navigation.onPointerFinish}
+					on:pointerleave={navigation.onPointerLeave}
 					on:wheel={navigation.onWheel}
 				>
 					<svg

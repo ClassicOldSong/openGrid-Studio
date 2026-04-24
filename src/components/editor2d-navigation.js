@@ -32,6 +32,8 @@ export function createEditor2DNavigation({
 	let dragStartY = 0;
 	let dragStartPanX = 0;
 	let dragStartPanY = 0;
+	let dragStartSceneX = 0;
+	let dragStartSceneY = 0;
 	let gestureStartZoom = 1;
 	let gestureStartPanX = 0;
 	let gestureStartPanY = 0;
@@ -43,6 +45,7 @@ export function createEditor2DNavigation({
 	let isDragging = false;
 	let gestureActive = false;
 	let hasManualNavigation = false;
+	let panOnlyPointer = false;
 
 	const getDefaultScale = () => {
 		const contentWidth = Math.max(sceneWidth.value, 1);
@@ -180,6 +183,22 @@ export function createEditor2DNavigation({
 		}
 	};
 
+	const clientPointToScenePoint = (
+		clientX,
+		clientY,
+		baseZoom = zoom.value,
+		basePanX = panX.value,
+		basePanY = panY.value,
+	) => {
+		if (!viewportEl) return { x: 0, y: 0 };
+		const rect = viewportEl.getBoundingClientRect();
+		const frame = getSceneFrame(baseZoom, basePanX, basePanY);
+		return {
+			x: (clientX - rect.left - frame.left) / Math.max(frame.scale, 0.0001),
+			y: (clientY - rect.top - frame.top) / Math.max(frame.scale, 0.0001),
+		};
+	};
+
 	const beginTouchGesture = () => {
 		const points = [...activeTouches.values()];
 		if (points.length < 2) return;
@@ -280,13 +299,29 @@ export function createEditor2DNavigation({
 
 	onDispose(() => resizeObserver?.disconnect());
 
-	const startPointerSession = (nextPointerId, clientX, clientY, action) => {
+	const startPointerSession = (
+		nextPointerId,
+		clientX,
+		clientY,
+		action,
+		{ panOnly = false } = {},
+	) => {
 		pointerId = nextPointerId;
+		panOnlyPointer = panOnly;
 		dragStartX = clientX;
 		dragStartY = clientY;
 		dragStartPanX = panX.value;
 		dragStartPanY = panY.value;
-		pressedAction = action;
+		const startScenePoint = clientPointToScenePoint(clientX, clientY);
+		dragStartSceneX = startScenePoint.x;
+		dragStartSceneY = startScenePoint.y;
+		pressedAction = action
+			? {
+					...action,
+					sceneX: startScenePoint.x,
+					sceneY: startScenePoint.y,
+				}
+			: action;
 		isDragging = false;
 		if (viewportEl) viewportEl.style.cursor = "grabbing";
 	};
@@ -294,12 +329,29 @@ export function createEditor2DNavigation({
 	const finishPointerSession = () => {
 		pointerId = null;
 		pressedAction = null;
+		panOnlyPointer = false;
 		isDragging = false;
 		if (viewportEl) viewportEl.style.cursor = "grab";
 	};
 
+	const performPressedAction = () => {
+		performAction(pressedAction ?? { type: "empty-space" });
+	};
+
+	const isEditableElement = (target) => {
+		if (!(target instanceof HTMLElement)) return false;
+		if (target.isContentEditable) return true;
+		return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+	};
+
+	const blurEditableActiveElement = () => {
+		const activeElement = document.activeElement;
+		if (isEditableElement(activeElement)) activeElement.blur();
+	};
+
 	const onPointerDown = (event) => {
 		showHint.value = false;
+		blurEditableActiveElement();
 		const action = readAction(event.target);
 
 		if (event.pointerType === "touch") {
@@ -308,7 +360,9 @@ export function createEditor2DNavigation({
 				clientX: event.clientX,
 				clientY: event.clientY,
 			});
-			event.currentTarget?.setPointerCapture?.(event.pointerId);
+			if (event.isTrusted) {
+				event.currentTarget?.setPointerCapture?.(event.pointerId);
+			}
 			if (activeTouches.size >= 2) {
 				pressedAction = null;
 				gestureActive = true;
@@ -317,15 +371,54 @@ export function createEditor2DNavigation({
 				return;
 			}
 			gestureActive = false;
+			if (action?.dragBehavior) {
+				const scenePoint = clientPointToScenePoint(event.clientX, event.clientY);
+				performAction({
+					...action,
+					phase: "start",
+					sceneX: scenePoint.x,
+					sceneY: scenePoint.y,
+					sceneDX: 0,
+					sceneDY: 0,
+				});
+			}
 			startPointerSession(event.pointerId, event.clientX, event.clientY, action);
 			return;
 		}
 
-		if (event.button > 2) return;
+		if (event.button === 2) {
+			event.preventDefault();
+			return;
+		}
+		if (event.button === 1) {
+			event.preventDefault();
+			hasManualNavigation = true;
+			startPointerSession(event.pointerId, event.clientX, event.clientY, null, {
+				panOnly: true,
+			});
+			if (event.isTrusted) {
+				event.currentTarget?.setPointerCapture?.(event.pointerId);
+			}
+			return;
+		}
+		if (event.button > 0) return;
 
 		event.preventDefault();
+		if (action?.dragBehavior) {
+			const scenePoint = clientPointToScenePoint(event.clientX, event.clientY);
+			performAction({
+				...action,
+				phase: "start",
+				sceneX: scenePoint.x,
+				sceneY: scenePoint.y,
+				sceneDX: 0,
+				sceneDY: 0,
+			});
+		}
 		startPointerSession(event.pointerId, event.clientX, event.clientY, action);
-		event.currentTarget?.setPointerCapture?.(event.pointerId);
+		if (event.isTrusted) {
+			event.currentTarget?.setPointerCapture?.(event.pointerId);
+		}
 	};
 
 	const onPointerMove = (event) => {
@@ -351,9 +444,37 @@ export function createEditor2DNavigation({
 				return;
 			}
 			isDragging = true;
+			if (pressedAction?.dragBehavior) {
+				const scenePoint = clientPointToScenePoint(event.clientX, event.clientY);
+				performAction({
+					...pressedAction,
+					phase: "move",
+					sceneX: scenePoint.x,
+					sceneY: scenePoint.y,
+					sceneDX: scenePoint.x - dragStartSceneX,
+					sceneDY: scenePoint.y - dragStartSceneY,
+				});
+				return;
+			}
 			hasManualNavigation = true;
 			pressedAction = null;
 			setView(zoom.value, dragStartPanX + dx, dragStartPanY + dy);
+			return;
+		}
+
+		if (pointerId === null) {
+			const scenePoint = clientPointToScenePoint(event.clientX, event.clientY);
+			const targetAction = readAction(event.target);
+			performAction({
+				type: "hover",
+				targetAction: targetAction
+					? {
+							...targetAction,
+							sceneX: scenePoint.x,
+							sceneY: scenePoint.y,
+						}
+					: null,
+			});
 			return;
 		}
 
@@ -364,6 +485,18 @@ export function createEditor2DNavigation({
 			return;
 		}
 		isDragging = true;
+		if (pressedAction?.dragBehavior) {
+			const scenePoint = clientPointToScenePoint(event.clientX, event.clientY);
+			performAction({
+				...pressedAction,
+				phase: "move",
+				sceneX: scenePoint.x,
+				sceneY: scenePoint.y,
+				sceneDX: scenePoint.x - dragStartSceneX,
+				sceneDY: scenePoint.y - dragStartSceneY,
+			});
+			return;
+		}
 		hasManualNavigation = true;
 		pressedAction = null;
 		setView(zoom.value, dragStartPanX + dx, dragStartPanY + dy);
@@ -372,9 +505,36 @@ export function createEditor2DNavigation({
 	const onPointerFinish = (event) => {
 		if (event.pointerType === "touch") {
 			activeTouches.delete(event.pointerId);
-			event.currentTarget?.releasePointerCapture?.(event.pointerId);
-			if (event.pointerId === pointerId && !gestureActive && !isDragging) {
-				performAction(pressedAction);
+			if (event.isTrusted) {
+				event.currentTarget?.releasePointerCapture?.(event.pointerId);
+			}
+			if (event.pointerId === pointerId && !gestureActive) {
+				if (pressedAction?.dragBehavior && isDragging) {
+					const scenePoint = clientPointToScenePoint(
+						event.clientX,
+						event.clientY,
+					);
+					performAction({
+						...pressedAction,
+						phase: "end",
+						sceneX: scenePoint.x,
+						sceneY: scenePoint.y,
+						sceneDX: scenePoint.x - dragStartSceneX,
+						sceneDY: scenePoint.y - dragStartSceneY,
+					});
+				} else if (!isDragging) {
+					if (pressedAction?.dragBehavior) {
+						performAction({
+							...pressedAction,
+							phase: "cancel",
+							sceneX: dragStartSceneX,
+							sceneY: dragStartSceneY,
+							sceneDX: 0,
+							sceneDY: 0,
+						});
+					}
+					performPressedAction();
+				}
 			}
 			if (activeTouches.size >= 2) {
 				pressedAction = null;
@@ -399,9 +559,33 @@ export function createEditor2DNavigation({
 		}
 
 		if (event.pointerId !== pointerId) return;
-		if (!isDragging) performAction(pressedAction);
+		if (pressedAction?.dragBehavior && isDragging) {
+			const scenePoint = clientPointToScenePoint(event.clientX, event.clientY);
+			performAction({
+				...pressedAction,
+				phase: "end",
+				sceneX: scenePoint.x,
+				sceneY: scenePoint.y,
+				sceneDX: scenePoint.x - dragStartSceneX,
+				sceneDY: scenePoint.y - dragStartSceneY,
+			});
+		} else if (!isDragging && !panOnlyPointer) {
+			if (pressedAction?.dragBehavior) {
+				performAction({
+					...pressedAction,
+					phase: "cancel",
+					sceneX: dragStartSceneX,
+					sceneY: dragStartSceneY,
+					sceneDX: 0,
+					sceneDY: 0,
+				});
+			}
+			performPressedAction();
+		}
 		finishPointerSession();
-		event.currentTarget?.releasePointerCapture?.(event.pointerId);
+		if (event.isTrusted) {
+			event.currentTarget?.releasePointerCapture?.(event.pointerId);
+		}
 	};
 
 	const onWheel = (event) => {
@@ -415,13 +599,58 @@ export function createEditor2DNavigation({
 		});
 	};
 
+	const onPointerLeave = () => {
+		if (pointerId !== null || activeTouches.size) return;
+		performAction({ type: "hover", targetAction: null });
+	};
+
+	const onContextMenu = (event) => {
+		event.preventDefault();
+		showHint.value = false;
+		const action = readAction(event.target);
+		if (action?.placementId) {
+			performAction({
+				type: "remove-placement",
+				placementId: action.placementId,
+			});
+			return;
+		}
+		if (!action || action.type === "place-tile") {
+			performAction({ type: "empty-space" });
+		}
+	};
+
+	const onAuxClick = (event) => {
+		if (event.button === 1) event.preventDefault();
+	};
+
+	const onKeyDown = (event) => {
+		if (isEditableElement(event.target)) return;
+		if (event.key === " " || event.key === "Spacebar" || event.code === "Space") {
+			event.preventDefault();
+			showHint.value = false;
+			performAction({ type: "rotate-active" });
+			return;
+		}
+		if (event.key !== "Backspace" && event.key !== "Delete") return;
+		event.preventDefault();
+		showHint.value = false;
+		performAction({ type: "remove-selected" });
+	};
+
+	window.addEventListener("keydown", onKeyDown);
+	onDispose(() => window.removeEventListener("keydown", onKeyDown));
+
 	return {
 		showHint,
 		attachViewport,
 		onPointerDown,
 		onPointerMove,
 		onPointerFinish,
+		onPointerLeave,
 		onWheel,
+		onContextMenu,
+		onAuxClick,
 		svgViewBox,
 		svgPreserveAspectRatio,
 		svgWidth,

@@ -113,7 +113,7 @@ function createProgram(gl) {
       vec3 viewPos = uRotation * (aPosition - uTranslation);
       vec3 viewNormal = normalize(uRotation * aNormal);
       vec3 lightDir = normalize(vec3(-0.55, -0.42, 0.72));
-      vLight = max(dot(viewNormal, lightDir), 0.0);
+      vLight = abs(dot(viewNormal, lightDir));
       gl_Position = vec4(
         viewPos.x * uClipScale.x,
         viewPos.y * uClipScale.y,
@@ -304,11 +304,11 @@ export default function Preview3D({ mesh, loading, error, theme, mobileLayout })
 			if (!positionBuffer || !normalBuffer) throw new Error('Failed to create WebGL buffers.')
 			gl.enable(gl.DEPTH_TEST)
 			gl.depthFunc(gl.LEQUAL)
-			gl.enable(gl.CULL_FACE)
-			gl.cullFace(gl.BACK)
+			gl.disable(gl.CULL_FACE)
 			gl.disable(gl.BLEND)
 			rendererError.value = ''
 		} catch (glError) {
+			console.error('Failed to initialize WebGL preview.', glError)
 			rendererError.value = glError instanceof Error ? glError.message : String(glError)
 			gl = null
 			glProgram = null
