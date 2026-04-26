@@ -1,3 +1,5 @@
+import { DEFAULT_TILE_DIMENSIONS } from "../shared/tile-dimensions.js";
+
 export const PIPEWARE_FEATURE_OPTIONS = Object.freeze([
 	Object.freeze({ value: "I", label: "Straight" }),
 	Object.freeze({ value: "L", label: "Corner" }),
@@ -228,21 +230,62 @@ export const PIPEWARE_CORD_CUTOUT_CHAMFER = 2;
 export const PIPEWARE_BOOLEAN_OVERLAP = 0.4;
 
 export function getPipewareOpeningCutCenterInsetUnits(tileSize) {
+	const baseCutDepth = getPipewareOpeningBaseCutDepth(tileSize);
+	const wallOverpunch = getPipewareOpeningWallOverpunch(tileSize);
 	return (
 		(PIPEWARE_CHANNEL_WIDTH_SEPARATION +
-			PIPEWARE_OPENING_BASE_CUT_DEPTH / 2 -
-			PIPEWARE_OPENING_WALL_OVERPUNCH / 2) /
+			baseCutDepth / 2 -
+			wallOverpunch / 2) /
 		tileSize
 	);
 }
 
+function getPipewareTileScale(tileSize) {
+	const number = Number(tileSize);
+	const fallback = DEFAULT_TILE_DIMENSIONS.tileSizeValue;
+	return (Number.isFinite(number) && number > 0 ? number : fallback) / fallback;
+}
+
+export function getPipewareGripSize(tileSize) {
+	return PIPEWARE_GRIP_SIZE * getPipewareTileScale(tileSize);
+}
+
+export function getPipewareGripSpacingFromChannel(tileSize) {
+	return PIPEWARE_GRIP_SPACING_FROM_CHANNEL * getPipewareTileScale(tileSize);
+}
+
+export function getPipewareOpeningBaseCutDepth(tileSize) {
+	return PIPEWARE_OPENING_BASE_CUT_DEPTH * getPipewareTileScale(tileSize);
+}
+
+export function getPipewareOpeningWallOverpunch(tileSize) {
+	return PIPEWARE_OPENING_WALL_OVERPUNCH * getPipewareTileScale(tileSize);
+}
+
+export function getPipewareCordCutoutWidth(tileSize) {
+	return PIPEWARE_CORD_CUTOUT_WIDTH * getPipewareTileScale(tileSize);
+}
+
+export function getPipewareCordCutoutChamfer(tileSize) {
+	return PIPEWARE_CORD_CUTOUT_CHAMFER * getPipewareTileScale(tileSize);
+}
+
+export function getPipewareOpeningCutDepth(tileSize) {
+	return (
+		getPipewareOpeningBaseCutDepth(tileSize) +
+		getPipewareOpeningWallOverpunch(tileSize)
+	);
+}
+
 export function getPipewareOpeningCutHalfWidth(tileSize) {
-	const desiredHalfWidth = PIPEWARE_CORD_CUTOUT_WIDTH / 2;
+	const desiredHalfWidth = getPipewareCordCutoutWidth(tileSize) / 2;
+	const gripSize = getPipewareGripSize(tileSize);
+	const gripSpacing = getPipewareGripSpacingFromChannel(tileSize);
 	const hookGapHalfWidth = Math.max(
 		0,
 		Math.min(
-			PIPEWARE_GRIP_SPACING_FROM_CHANNEL,
-			tileSize - PIPEWARE_GRIP_SIZE - PIPEWARE_GRIP_SPACING_FROM_CHANNEL,
+			gripSpacing,
+			tileSize - gripSize - gripSpacing,
 		) - PIPEWARE_BOOLEAN_OVERLAP,
 	);
 	return Math.max(0.001, Math.min(desiredHalfWidth, hookGapHalfWidth));

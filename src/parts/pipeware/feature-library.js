@@ -1,15 +1,15 @@
 import {
 	PIPEWARE_DEFAULT_FEATURE_PARAMS,
 	PIPEWARE_FEATURE_OPTIONS,
-	PIPEWARE_CORD_CUTOUT_WIDTH,
+	getPipewareCordCutoutWidth,
 	getPipewareOpeningCutCenterInsetUnits,
 	getPipewareOpeningCutHalfWidthUnits,
-	PIPEWARE_GRIP_SIZE,
-	PIPEWARE_GRIP_SPACING_FROM_CHANNEL,
-	PIPEWARE_OPENING_BASE_CUT_DEPTH,
+	getPipewareOpeningBaseCutDepth,
+	getPipewareOpeningWallOverpunch,
+	getPipewareGripSize,
+	getPipewareGripSpacingFromChannel,
 	PIPEWARE_OPENING_EDGE_INSET_UNITS,
 	PIPEWARE_OPENING_LINE_LENGTH_UNITS,
-	PIPEWARE_OPENING_WALL_OVERPUNCH,
 	PIPEWARE_PARAM_LIMITS,
 	PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
 	PIPEWARE_THICKNESS_MIN,
@@ -1333,10 +1333,10 @@ function getPipewareHookLineSegments(type, params, tileSize) {
 	const segments = [];
 	const cornerSafetyUnits =
 		Number.isFinite(Number(tileSize)) && Number(tileSize) > 0
-			? PIPEWARE_OPENING_WALL_OVERPUNCH / Number(tileSize)
+			? getPipewareOpeningWallOverpunch(tileSize) / Number(tileSize)
 			: 0;
 	const pushIfHookable = (segment) => {
-		if (getPipewareSegmentLength(segment) * tileSize <= PIPEWARE_GRIP_SIZE) {
+		if (getPipewareSegmentLength(segment) * tileSize <= getPipewareGripSize(tileSize)) {
 			return;
 		}
 		segments.push(segment);
@@ -1477,13 +1477,14 @@ function getPipewareEdgePointInBase(placement, edgeKey) {
 
 function openingSpanIntersectsHook(along, length, tileSize, options = {}) {
 	const cutHalfLength =
-		options.cutHalfLengthUnits ?? PIPEWARE_CORD_CUTOUT_WIDTH / 2 / tileSize;
+		options.cutHalfLengthUnits ?? getPipewareCordCutoutWidth(tileSize) / 2 / tileSize;
 	const hookSafety =
 		(options.hookSafetyMM ?? 0) / tileSize +
 		(options.hookSafetyUnits ?? 0);
-	const gripStart = PIPEWARE_GRIP_SPACING_FROM_CHANNEL / tileSize;
+	const gripStart = getPipewareGripSpacingFromChannel(tileSize) / tileSize;
 	const gripEnd =
-		(PIPEWARE_GRIP_SPACING_FROM_CHANNEL + PIPEWARE_GRIP_SIZE) / tileSize;
+		(getPipewareGripSpacingFromChannel(tileSize) + getPipewareGripSize(tileSize)) /
+		tileSize;
 	for (let index = 0; index + gripEnd <= length + 0.0001; index++) {
 		const start =
 			index + gripStart - (options.hookSafetyStartUnits ?? 0);
@@ -1501,7 +1502,7 @@ function openingSpanIntersectsHook(along, length, tileSize, options = {}) {
 function getPipewareHookSideToleranceUnits(tileSize, options = {}) {
 	const physicalTileSize = Number(tileSize);
 	const toleranceMM =
-		options.hookSideToleranceMM ?? PIPEWARE_OPENING_BASE_CUT_DEPTH / 2;
+		options.hookSideToleranceMM ?? getPipewareOpeningBaseCutDepth(tileSize) / 2;
 	const toleranceUnits = options.hookSideToleranceUnits ?? 0;
 	return (
 		(Number.isFinite(physicalTileSize) && physicalTileSize > 0

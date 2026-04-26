@@ -49,17 +49,17 @@ import {
 	getPipewareOpeningCutHalfWidth,
 	PIPEWARE_BASE_HEIGHT,
 	PIPEWARE_BOOLEAN_OVERLAP,
-	PIPEWARE_CORD_CUTOUT_CHAMFER,
+	getPipewareCordCutoutChamfer,
 	PIPEWARE_DEFAULT_CIRCLE_SEGMENTS,
 	PIPEWARE_DEFAULT_HEIGHT,
 	PIPEWARE_DEFAULT_TILE_SIZE,
 	PIPEWARE_EPSILON,
-	PIPEWARE_GRIP_SIZE,
-	PIPEWARE_GRIP_SPACING_FROM_CHANNEL,
+	getPipewareGripSize,
+	getPipewareGripSpacingFromChannel,
 	PIPEWARE_MIN_ARC_SEGMENTS,
 	PIPEWARE_NUDGE,
 	PIPEWARE_OPENING_COVER_CLEARANCE,
-	PIPEWARE_OPENING_CUT_DEPTH,
+	getPipewareOpeningCutDepth,
 	PIPEWARE_SNAP_WALL_THICKNESS,
 	PIPEWARE_TOP_CHAMFER,
 } from "./geometry/physical-constants.js";
@@ -485,15 +485,15 @@ function addStraightGripModels(
 	height,
 ) {
 	const widthMM = getPipewareChannelWidth(tileSize, base.params.widthUnits);
+	const gripSize = getPipewareGripSize(tileSize);
+	const gripSpacing = getPipewareGripSpacingFromChannel(tileSize);
 	const lengthUnits =
 		base.type === "I" ? base.params.lengthUnits : base.params.lengthUnitsX;
 	const centerY = base.params.widthUnits / 2;
-	if (lengthUnits * tileSize <= PIPEWARE_GRIP_SIZE) return;
+	if (lengthUnits * tileSize <= gripSize) return;
 	for (let index = 0; index < lengthUnits; index++) {
-		const startX = index + PIPEWARE_GRIP_SPACING_FROM_CHANNEL / tileSize;
-		const endX =
-			index +
-			(PIPEWARE_GRIP_SIZE + PIPEWARE_GRIP_SPACING_FROM_CHANNEL) / tileSize;
+		const startX = index + gripSpacing / tileSize;
+		const endX = index + (gripSize + gripSpacing) / tileSize;
 		for (const side of [-1, 1]) {
 			const profile = createPipewareGripProfile(widthMM, side, height);
 			const grip = buildGripModel(
@@ -527,13 +527,13 @@ function addCornerGripModels(
 ) {
 	if (base.type !== "L") return;
 	const widthMM = getPipewareChannelWidth(tileSize, base.params.widthUnits);
+	const gripSize = getPipewareGripSize(tileSize);
+	const gripSpacing = getPipewareGripSpacingFromChannel(tileSize);
 	const geometry = getBasePipewareLGeometry(base.params);
-	if (base.params.lengthUnitsX * tileSize > PIPEWARE_GRIP_SIZE) {
+	if (base.params.lengthUnitsX * tileSize > gripSize) {
 		for (let index = 0; index < base.params.lengthUnitsX; index++) {
-			const startX = index + PIPEWARE_GRIP_SPACING_FROM_CHANNEL / tileSize;
-			const endX =
-				index +
-				(PIPEWARE_GRIP_SIZE + PIPEWARE_GRIP_SPACING_FROM_CHANNEL) / tileSize;
+			const startX = index + gripSpacing / tileSize;
+			const endX = index + (gripSize + gripSpacing) / tileSize;
 			for (const side of [-1, 1]) {
 				const profile = createPipewareGripProfile(widthMM, side, height);
 				const grip = buildGripModel(
@@ -554,16 +554,13 @@ function addCornerGripModels(
 			}
 		}
 	}
-	if (base.params.lengthUnitsY * tileSize <= PIPEWARE_GRIP_SIZE) return;
+	if (base.params.lengthUnitsY * tileSize <= gripSize) return;
 	for (let index = 0; index < base.params.lengthUnitsY; index++) {
-		const startY =
-			geometry.center.y +
-			index +
-			PIPEWARE_GRIP_SPACING_FROM_CHANNEL / tileSize;
+		const startY = geometry.center.y + index + gripSpacing / tileSize;
 		const endY =
 			geometry.center.y +
 			index +
-			(PIPEWARE_GRIP_SIZE + PIPEWARE_GRIP_SPACING_FROM_CHANNEL) / tileSize;
+			(gripSize + gripSpacing) / tileSize;
 		for (const side of [-1, 1]) {
 			const profile = createPipewareGripProfile(widthMM, side, height);
 			const grip = buildGripModel(
@@ -612,17 +609,16 @@ function addLineSegmentGripModels(
 		segment.end.x - segment.start.x,
 		segment.end.y - segment.start.y,
 	);
-	if (lengthUnits * tileSize <= PIPEWARE_GRIP_SIZE) return;
+	const gripSize = getPipewareGripSize(tileSize);
+	const gripSpacing = getPipewareGripSpacingFromChannel(tileSize);
+	if (lengthUnits * tileSize <= gripSize) return;
 	const widthMM = getPipewareChannelWidth(
 		tileSize,
 		segment.widthUnits ?? base.params.channelWidthUnits ?? base.params.widthUnits,
 	);
 	for (let index = 0; index < Math.floor(lengthUnits); index++) {
-		const startDistance =
-			index + PIPEWARE_GRIP_SPACING_FROM_CHANNEL / tileSize;
-		const endDistance =
-			index +
-			(PIPEWARE_GRIP_SIZE + PIPEWARE_GRIP_SPACING_FROM_CHANNEL) / tileSize;
+		const startDistance = index + gripSpacing / tileSize;
+		const endDistance = index + (gripSize + gripSpacing) / tileSize;
 		if (endDistance > lengthUnits + PIPEWARE_EPSILON) continue;
 		const start = interpolateLinePoint(segment, startDistance);
 		const end = interpolateLinePoint(segment, endDistance);
@@ -812,10 +808,11 @@ function getOpeningCutHalfWidth(tileSize) {
 }
 
 function createOpeningCutProfile(tangentOffset, height, tileSize) {
-	const halfDepth = PIPEWARE_OPENING_CUT_DEPTH / 2;
+	const halfDepth = getPipewareOpeningCutDepth(tileSize) / 2;
 	const halfWidth = getOpeningCutHalfWidth(tileSize);
+	const cutoutChamfer = getPipewareCordCutoutChamfer(tileSize);
 	const cornerRadius = Math.min(
-		PIPEWARE_CORD_CUTOUT_CHAMFER,
+		cutoutChamfer,
 		halfWidth - PIPEWARE_EPSILON,
 	);
 	const clampedOffset = Math.max(
@@ -845,8 +842,9 @@ function createOpeningCutProfile(tangentOffset, height, tileSize) {
 
 function getOpeningCutTangentOffsets(tileSize, circleSegments) {
 	const halfWidth = getOpeningCutHalfWidth(tileSize);
+	const cutoutChamfer = getPipewareCordCutoutChamfer(tileSize);
 	const cornerRadius = Math.min(
-		PIPEWARE_CORD_CUTOUT_CHAMFER,
+		cutoutChamfer,
 		halfWidth - PIPEWARE_EPSILON,
 	);
 	const cornerSteps = getArcSegmentCount(0, Math.PI / 2, circleSegments);
@@ -1131,11 +1129,12 @@ function buildSampledOpeningCutStationGroups(
 	}
 
 	const radius = getOpeningCutHalfWidth(tileSize);
+	const cutoutChamfer = getPipewareCordCutoutChamfer(tileSize);
 	const segmentLengthUnits = segmentLength(sample.segment);
 	const junctionThreshold =
 		segmentLengthUnits <= PIPEWARE_EPSILON
 			? 0
-			: (radius + PIPEWARE_CORD_CUTOUT_CHAMFER) /
+			: (radius + cutoutChamfer) /
 				(segmentLengthUnits * tileSize);
 	const groups = [];
 	pushSampledOpeningCutStations(
