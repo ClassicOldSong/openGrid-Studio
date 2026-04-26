@@ -3,6 +3,7 @@ import { PIPEWARE_METADATA } from "./metadata.js";
 import PipewareConfigSection from "./ConfigSection.jsx";
 import { createPipewareController } from "./controller.js";
 import { createPipewareDefaultConfig } from "./default-config.js";
+import { buildPipewareExportFilename } from "./export.js";
 
 function createPipewareConfigPanel(context) {
 	const { app, partController: pipeware } = context;
@@ -48,6 +49,7 @@ export const PIPEWARE_FRONTEND_PART = Object.freeze({
 	}),
 	createDefaultConfig: createPipewareDefaultConfig,
 	createController: createPipewareController,
+	buildExportFilename: buildPipewareExportFilename,
 	configPanel: Object.freeze({
 		create: createPipewareConfigPanel,
 	}),

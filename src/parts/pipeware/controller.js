@@ -525,6 +525,7 @@ export function createPipewareController({
 		pipewareBoardThicknessValue: pipewareBoardThicknessValue.value,
 		circleSegmentsValue: circleSegmentsValue.value,
 		pipewarePlacements: pipewarePlacements.value,
+		pipewareActiveFeatureConfig: pipewareActiveFeatureConfig.value,
 	});
 
 	const updateSize = (nextW, nextH, offsetX = 0, offsetY = 0) => {

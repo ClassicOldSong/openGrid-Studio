@@ -1,6 +1,7 @@
 import { PIPEWARE_METADATA } from "./metadata.js";
 import { createPipewareEditor2D } from "./editor2d.js";
 import { createPipewareDefaultConfig } from "./default-config.js";
+import { buildPipewareExportFilename } from "./export.js";
 import {
 	renderPipewareExport,
 	renderPipewarePreviewMesh,
@@ -16,6 +17,7 @@ export const PIPEWARE_PART = Object.freeze({
 		textExport: null,
 	}),
 	createDefaultConfig: createPipewareDefaultConfig,
+	buildExportFilename: buildPipewareExportFilename,
 	editors: Object.freeze({
 		preview2D: Object.freeze({
 			create: createPipewareEditor2D,

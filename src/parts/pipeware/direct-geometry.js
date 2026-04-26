@@ -1640,6 +1640,7 @@ function buildPipewarePlacementModel(
 		base,
 		tileSize,
 		height,
+		circleSegments,
 	);
 	if (!shell || shell.isEmpty()) return null;
 	const cutModels = buildOpeningCutModels(
