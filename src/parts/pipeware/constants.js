@@ -2,6 +2,7 @@ import { DEFAULT_TILE_DIMENSIONS } from "../shared/tile-dimensions.js";
 
 export const PIPEWARE_FEATURE_OPTIONS = Object.freeze([
 	Object.freeze({ value: "I", label: "Straight" }),
+	Object.freeze({ value: "B", label: "Bridge" }),
 	Object.freeze({ value: "L", label: "Corner" }),
 	Object.freeze({ value: "T", label: "T Junction" }),
 	Object.freeze({ value: "X", label: "Cross" }),
@@ -18,6 +19,19 @@ export const PIPEWARE_PARAM_LIMITS = Object.freeze({
 	I: Object.freeze({
 		lengthUnits: Object.freeze({ min: 1, max: 24 }),
 		widthUnits: Object.freeze({ min: 1, max: 8 }),
+		zHeightValue: Object.freeze({
+			min: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
+			max: PIPEWARE_THICKNESS_MAX,
+		}),
+	}),
+	B: Object.freeze({
+		lengthUnits: Object.freeze({ min: 1, max: 24 }),
+		widthUnits: Object.freeze({ min: 1, max: 8 }),
+		bridgeClearanceValue: Object.freeze({ min: 0, max: PIPEWARE_THICKNESS_MAX }),
+		openingHeightValue: Object.freeze({
+			min: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
+			max: PIPEWARE_THICKNESS_MAX,
+		}),
 		zHeightValue: Object.freeze({
 			min: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
 			max: PIPEWARE_THICKNESS_MAX,
@@ -86,6 +100,13 @@ export const PIPEWARE_DEFAULT_FEATURE_PARAMS = Object.freeze({
 		widthUnits: 1,
 		zHeightValue: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
 	}),
+	B: Object.freeze({
+		lengthUnits: 3,
+		widthUnits: 1,
+		bridgeClearanceValue: PIPEWARE_DEFAULT_BOARD_THICKNESS + 7.4,
+		openingHeightValue: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
+		zHeightValue: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
+	}),
 	L: Object.freeze({
 		lengthUnitsX: 0,
 		lengthUnitsY: 0,
@@ -132,6 +153,25 @@ export const PIPEWARE_PARAM_FIELDS = Object.freeze({
 	I: Object.freeze([
 		Object.freeze({ key: "lengthUnits", label: "Straight Length" }),
 		Object.freeze({ key: "widthUnits", label: "Width" }),
+		Object.freeze({
+			key: "zHeightValue",
+			label: "Part Inner Height",
+			step: 0.1,
+		}),
+	]),
+	B: Object.freeze([
+		Object.freeze({ key: "lengthUnits", label: "Bridge Length" }),
+		Object.freeze({ key: "widthUnits", label: "Width" }),
+		Object.freeze({
+			key: "bridgeClearanceValue",
+			label: "Bridge Clearance",
+			step: 0.1,
+		}),
+		Object.freeze({
+			key: "openingHeightValue",
+			label: "Opening Inner Height",
+			step: 0.1,
+		}),
 		Object.freeze({
 			key: "zHeightValue",
 			label: "Part Inner Height",

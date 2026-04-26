@@ -15,9 +15,13 @@ import {
 	pipewarePlacementGeometrySticksOut,
 	remapPipewareEdgeCutsForPlacementChange,
 } from "./feature-library.js";
-import { PIPEWARE_DEFAULT_EDITOR_STATE } from "./constants.js";
+import {
+	PIPEWARE_DEFAULT_BOARD_THICKNESS,
+	PIPEWARE_DEFAULT_EDITOR_STATE,
+} from "./constants.js";
 
 const PIPEWARE_COLLISION_SAMPLE_RESOLUTION = 24;
+const PIPEWARE_BRIDGE_CLEARANCE_OVERHEAD = 7.4;
 
 function nextPipewarePlacementId(placements) {
 	const nextNumber =
@@ -102,6 +106,18 @@ function anchorPipewareLParamChangeToInnerCorner(placement, nextPlacement, patch
 }
 
 export function pipewarePlacementsOverlap(a, b) {
+	if (a?.type === "B" && b?.type === "B") {
+		return pipewareBridgeBridgePlacementsOverlap(a, b);
+	}
+	if (a?.type === "B" && b?.type !== "B") {
+		return pipewareBridgePlacementOverlaps(a, b);
+	}
+	if (b?.type === "B" && a?.type !== "B") {
+		return pipewareBridgePlacementOverlaps(b, a);
+	}
+	const aZRange = getPipewarePlacementCollisionZRange(a);
+	const bZRange = getPipewarePlacementCollisionZRange(b);
+	if (aZRange.max <= bZRange.min || bZRange.max <= aZRange.min) return false;
 	const aBounds = getPipewarePlacementBounds(a);
 	const bBounds = getPipewarePlacementBounds(b);
 	const minX = Math.max(aBounds.tx, bBounds.tx);
@@ -126,6 +142,144 @@ export function pipewarePlacementsOverlap(a, b) {
 		}
 	}
 	return false;
+}
+
+function pipewareBridgeClearanceCoversPlacement(bridge, placement) {
+	const clearance = Number(bridge?.params?.bridgeClearanceValue);
+	return (
+		Number.isFinite(clearance) &&
+		clearance >= getPipewarePlacementCollisionHeight(placement)
+	);
+}
+
+function getPipewareBridgeClearance(bridge) {
+	const clearance = Number(bridge?.params?.bridgeClearanceValue);
+	return Number.isFinite(clearance) && clearance > 0 ? clearance : 0;
+}
+
+function pointInPipewareBridgeLoweredSpan(bridge, x, y) {
+	const bounds = getPipewarePlacementBounds(bridge);
+	const turns = normalizePipewareRotation(bridge.rotation) / 90;
+	const localX = x - bounds.tx;
+	const localY = y - bounds.ty;
+	const basePoint = rotateLocalPointCCWNTimes(
+		localX,
+		localY,
+		bounds.width,
+		bounds.height,
+		(4 - turns) % 4,
+	);
+	const length = Math.max(0, Number(bridge?.params?.lengthUnits) || 0);
+	const totalLength = length + 2;
+	const transition = 1;
+	return (
+		basePoint.x > transition &&
+		basePoint.x < totalLength - transition
+	);
+}
+
+function pipewareBridgeBridgePlacementsOverlap(a, b) {
+	const aBounds = getPipewarePlacementBounds(a);
+	const bBounds = getPipewarePlacementBounds(b);
+	const minX = Math.max(aBounds.tx, bBounds.tx);
+	const minY = Math.max(aBounds.ty, bBounds.ty);
+	const maxX = Math.min(aBounds.tx + aBounds.width, bBounds.tx + bBounds.width);
+	const maxY = Math.min(aBounds.ty + aBounds.height, bBounds.ty + bBounds.height);
+	if (minX >= maxX || minY >= maxY) return false;
+
+	const startSampleX = Math.floor(minX * PIPEWARE_COLLISION_SAMPLE_RESOLUTION);
+	const startSampleY = Math.floor(minY * PIPEWARE_COLLISION_SAMPLE_RESOLUTION);
+	const endSampleX = Math.ceil(maxX * PIPEWARE_COLLISION_SAMPLE_RESOLUTION);
+	const endSampleY = Math.ceil(maxY * PIPEWARE_COLLISION_SAMPLE_RESOLUTION);
+	const pointInsideA = createPipewarePlacementBandTester(a);
+	const pointInsideB = createPipewarePlacementBandTester(b);
+	const aClearance = getPipewareBridgeClearance(a);
+	const bClearance = getPipewareBridgeClearance(b);
+	const aClearanceCoversB = pipewareBridgeClearanceCoversPlacement(a, b);
+	const bClearanceCoversA = pipewareBridgeClearanceCoversPlacement(b, a);
+	for (let sampleY = startSampleY; sampleY < endSampleY; sampleY++) {
+		for (let sampleX = startSampleX; sampleX < endSampleX; sampleX++) {
+			const x = (sampleX + 0.5) / PIPEWARE_COLLISION_SAMPLE_RESOLUTION;
+			const y = (sampleY + 0.5) / PIPEWARE_COLLISION_SAMPLE_RESOLUTION;
+			if (!pointInsideA(x, y) || !pointInsideB(x, y)) continue;
+			const aLowered = pointInPipewareBridgeLoweredSpan(a, x, y);
+			const bLowered = pointInPipewareBridgeLoweredSpan(b, x, y);
+			if (
+				(aLowered &&
+					aClearanceCoversB &&
+					aClearance > bClearance + Number.EPSILON) ||
+				(bLowered &&
+					bClearanceCoversA &&
+					bClearance > aClearance + Number.EPSILON)
+			) {
+				continue;
+			}
+			return true;
+		}
+	}
+	return false;
+}
+
+function pipewareBridgePlacementOverlaps(bridge, placement) {
+	const bridgeBounds = getPipewarePlacementBounds(bridge);
+	const placementBounds = getPipewarePlacementBounds(placement);
+	const minX = Math.max(bridgeBounds.tx, placementBounds.tx);
+	const minY = Math.max(bridgeBounds.ty, placementBounds.ty);
+	const maxX = Math.min(
+		bridgeBounds.tx + bridgeBounds.width,
+		placementBounds.tx + placementBounds.width,
+	);
+	const maxY = Math.min(
+		bridgeBounds.ty + bridgeBounds.height,
+		placementBounds.ty + placementBounds.height,
+	);
+	if (minX >= maxX || minY >= maxY) return false;
+
+	const startSampleX = Math.floor(minX * PIPEWARE_COLLISION_SAMPLE_RESOLUTION);
+	const startSampleY = Math.floor(minY * PIPEWARE_COLLISION_SAMPLE_RESOLUTION);
+	const endSampleX = Math.ceil(maxX * PIPEWARE_COLLISION_SAMPLE_RESOLUTION);
+	const endSampleY = Math.ceil(maxY * PIPEWARE_COLLISION_SAMPLE_RESOLUTION);
+	const pointInsideBridge = createPipewarePlacementBandTester(bridge);
+	const pointInsidePlacement = createPipewarePlacementBandTester(placement);
+	const clearanceCoversPlacement = pipewareBridgeClearanceCoversPlacement(
+		bridge,
+		placement,
+	);
+
+	for (let sampleY = startSampleY; sampleY < endSampleY; sampleY++) {
+		for (let sampleX = startSampleX; sampleX < endSampleX; sampleX++) {
+			const x = (sampleX + 0.5) / PIPEWARE_COLLISION_SAMPLE_RESOLUTION;
+			const y = (sampleY + 0.5) / PIPEWARE_COLLISION_SAMPLE_RESOLUTION;
+			if (!pointInsideBridge(x, y) || !pointInsidePlacement(x, y)) continue;
+			if (
+				clearanceCoversPlacement &&
+				pointInPipewareBridgeLoweredSpan(bridge, x, y)
+			) {
+				continue;
+			}
+			return true;
+		}
+	}
+	return false;
+}
+
+function getPipewarePlacementCollisionHeight(placement) {
+	const height = Number(placement?.params?.zHeightValue);
+	const innerHeight = Number.isFinite(height) && height > 0
+		? height
+		: PIPEWARE_DEFAULT_BOARD_THICKNESS;
+	return innerHeight + PIPEWARE_BRIDGE_CLEARANCE_OVERHEAD;
+}
+
+function getPipewarePlacementCollisionZRange(placement) {
+	const min =
+		placement?.type === "B"
+			? Math.max(0, Number(placement?.params?.bridgeClearanceValue) || 0)
+			: 0;
+	return {
+		min,
+		max: min + getPipewarePlacementCollisionHeight(placement),
+	};
 }
 
 function canUsePlacement(candidate, placements, width, height, skipId = null) {

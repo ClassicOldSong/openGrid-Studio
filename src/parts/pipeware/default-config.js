@@ -6,8 +6,8 @@ import {
 
 export function createPipewareDefaultConfig() {
 	return {
-		width: 4,
-		height: 4,
+		width: 16,
+		height: 16,
 		...createDefaultTileDimensions(),
 		pipewareBoardThicknessValue: PIPEWARE_DEFAULT_BOARD_THICKNESS,
 		pipewarePlacements: [],

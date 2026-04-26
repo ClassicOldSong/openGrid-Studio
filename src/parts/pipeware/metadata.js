@@ -5,7 +5,7 @@ export const PIPEWARE_METADATA = Object.freeze({
 	name: "Pipeware",
 	description: "Continuous pipeware channel generation from tile connectivity.",
 	credit: Object.freeze({
-		label: "Based on the Underware system by Katie",
+		label: "Inspired by the Underware system by Katie",
 		url: "https://www.handsonkatie.com/underware",
 	}),
 	profileImage: "/logo.png",

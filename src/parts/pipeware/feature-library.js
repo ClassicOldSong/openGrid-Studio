@@ -151,12 +151,19 @@ export function normalizePipewareFeatureParams(type, params = {}) {
 			sourceValue = sourceParams.widthUnits;
 		}
 		normalized[key] =
-			key === "zHeightValue"
+			key === "zHeightValue" || key === "openingHeightValue"
 				? normalizePipewareZHeight(
 						sourceValue ?? fallback[key],
 						limit.max,
 						fallback[key],
 					)
+				: key === "bridgeClearanceValue"
+					? clampPipewareNumber(
+							sourceValue ?? fallback[key],
+							limit.min,
+							limit.max,
+							fallback[key],
+						)
 				: clampPipewareInteger(
 						sourceValue ?? fallback[key],
 						limit.min,
@@ -1633,8 +1640,12 @@ function getBasePipewarePlacementEdgeKeys(placement) {
 		edgeKeys.push(edgeKey);
 	};
 
-	if (type === "I") {
-		for (let index = 0; index <= params.lengthUnits; index++) {
+	if (type === "I" || type === "B") {
+		const lengthUnits =
+			type === "B"
+				? getPipewareFeatureBaseGeometry(type, params).baseWidth
+				: params.lengthUnits;
+		for (let index = 0; index <= lengthUnits; index++) {
 			pushEdge(index, 0, "N");
 			pushEdge(index, params.widthUnits, "S");
 		}

@@ -27,84 +27,95 @@ function PipewareGridLayer({ scene }) {
 	);
 }
 
+function PipewarePlacementBody({ item }) {
+	return (
+		<g attr:opacity={item.groupOpacity ?? 1}>
+			<If condition={item.hasMask}>
+				{() => (
+					<defs>
+						<mask
+							attr:id={item.maskId}
+							attr:x={item.maskBounds.x}
+							attr:y={item.maskBounds.y}
+							attr:width={item.maskBounds.w}
+							attr:height={item.maskBounds.h}
+							attr:maskUnits="userSpaceOnUse"
+							attr:maskContentUnits="userSpaceOnUse"
+						>
+							<rect
+								attr:x={item.maskBounds.x}
+								attr:y={item.maskBounds.y}
+								attr:width={item.maskBounds.w}
+								attr:height={item.maskBounds.h}
+								attr:fill="white"
+							/>
+							<For entries={item.portClipShapes} track="id">
+								{({ item: clip }) => (
+									<rect
+										attr:x={clip.x}
+										attr:y={clip.y}
+										attr:width={clip.w}
+										attr:height={clip.h}
+										attr:fill="black"
+									/>
+								)}
+							</For>
+							<For entries={item.notchShapes} track="id">
+								{({ item: notch }) => (
+									<path
+										attr:d={notch.path}
+										attr:fill={notch.fill ?? "none"}
+										attr:stroke={notch.stroke ?? "black"}
+										attr:stroke-width={notch.strokeWidth ?? 0}
+										attr:stroke-linecap={notch.lineCap ?? "round"}
+										attr:stroke-linejoin={notch.lineJoin ?? "round"}
+									/>
+								)}
+							</For>
+						</mask>
+					</defs>
+				)}
+			</If>
+			<For entries={item.bodyShapes} track="id">
+				{({ item: shape }) => (
+					<path
+						attr:d={shape.path}
+						attr:fill={item.fill}
+						attr:stroke={item.stroke}
+						attr:stroke-width={shape.strokeWidth}
+						attr:stroke-opacity={item.strokeOpacity ?? 1}
+						attr:stroke-dasharray={item.strokeDasharray}
+						attr:stroke-linecap={item.lineCap}
+						attr:stroke-linejoin={item.lineJoin}
+						attr:mask={item.hasMask ? `url(#${item.maskId})` : undefined}
+					/>
+				)}
+			</For>
+			<For entries={item.directionMarkers} track="id">
+				{({ item: marker }) => (
+					<path
+						attr:d={marker.path}
+						attr:fill={item.directionMarkerFill}
+						attr:fill-opacity={item.directionMarkerOpacity}
+						attr:pointer-events="none"
+					/>
+				)}
+			</For>
+		</g>
+	);
+}
+
 function PipewarePlacementsLayer({ scene }) {
 	return (
 		<g>
-			<For entries={scene.placements} track="renderKey">
+			<For entries={scene.normalPlacements} track="renderKey">
 				{({ item }) => (
-					<g attr:opacity={item.groupOpacity ?? 1}>
-						<If condition={item.hasMask}>
-							{() => (
-								<defs>
-									<mask
-										attr:id={item.maskId}
-										attr:x={item.maskBounds.x}
-										attr:y={item.maskBounds.y}
-										attr:width={item.maskBounds.w}
-										attr:height={item.maskBounds.h}
-										attr:maskUnits="userSpaceOnUse"
-										attr:maskContentUnits="userSpaceOnUse"
-									>
-										<rect
-											attr:x={item.maskBounds.x}
-											attr:y={item.maskBounds.y}
-											attr:width={item.maskBounds.w}
-											attr:height={item.maskBounds.h}
-											attr:fill="white"
-										/>
-										<For entries={item.portClipShapes} track="id">
-											{({ item: clip }) => (
-												<rect
-													attr:x={clip.x}
-													attr:y={clip.y}
-													attr:width={clip.w}
-													attr:height={clip.h}
-													attr:fill="black"
-												/>
-											)}
-										</For>
-										<For entries={item.notchShapes} track="id">
-											{({ item: notch }) => (
-												<path
-													attr:d={notch.path}
-													attr:fill={notch.fill ?? "none"}
-													attr:stroke={notch.stroke ?? "black"}
-													attr:stroke-width={notch.strokeWidth ?? 0}
-													attr:stroke-linecap={notch.lineCap ?? "round"}
-													attr:stroke-linejoin={notch.lineJoin ?? "round"}
-												/>
-											)}
-										</For>
-									</mask>
-								</defs>
-							)}
-						</If>
-						<For entries={item.bodyShapes} track="id">
-							{({ item: shape }) => (
-								<path
-									attr:d={shape.path}
-									attr:fill={item.fill}
-									attr:stroke={item.stroke}
-									attr:stroke-width={shape.strokeWidth}
-									attr:stroke-opacity={item.strokeOpacity ?? 1}
-									attr:stroke-dasharray={item.strokeDasharray}
-									attr:stroke-linecap={item.lineCap}
-									attr:stroke-linejoin={item.lineJoin}
-									attr:mask={item.hasMask ? `url(#${item.maskId})` : undefined}
-								/>
-							)}
-						</For>
-						<For entries={item.directionMarkers} track="id">
-							{({ item: marker }) => (
-								<path
-									attr:d={marker.path}
-									attr:fill={item.directionMarkerFill}
-									attr:fill-opacity={item.directionMarkerOpacity}
-									attr:pointer-events="none"
-								/>
-							)}
-						</For>
-					</g>
+					<PipewarePlacementBody item={item} />
+				)}
+			</For>
+			<For entries={scene.bridgePlacements} track="renderKey">
+				{({ item }) => (
+					<PipewarePlacementBody item={item} />
 				)}
 			</For>
 			<For entries={scene.placements} track="renderKey">

@@ -174,6 +174,29 @@ function getStraightGeometry(type, params) {
 	};
 }
 
+function getBridgeGeometry(type, params) {
+	const widthUnits = params.widthUnits ?? 1;
+	const spanUnits = params.lengthUnits ?? 1;
+	return {
+		type,
+		params,
+		widthUnits,
+		baseWidth: spanUnits + 2,
+		baseHeight: widthUnits,
+		centerlinePaths: [
+			{
+				id: "bridge",
+				segments: [
+					lineSegment(
+						{ x: 0, y: widthUnits / 2 },
+						{ x: spanUnits + 2, y: widthUnits / 2 },
+					),
+				],
+			},
+		],
+	};
+}
+
 function getCornerGeometry(type, params) {
 	const geometry = getBasePipewareLGeometry(params);
 	const segments = [];
@@ -424,6 +447,8 @@ function getDiagonalGeometry(type, params) {
 
 export function getPipewareFeatureBaseGeometry(type, params) {
 	switch (type) {
+		case "B":
+			return getBridgeGeometry(type, params);
 		case "L":
 			return getCornerGeometry(type, params);
 		case "T":

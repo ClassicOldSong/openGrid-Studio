@@ -1353,7 +1353,10 @@ export function createPipewareEditor2D(context) {
 				});
 			}
 		}
-		return items;
+		return [
+			...items.filter((item) => item.placementType !== "B"),
+			...items.filter((item) => item.placementType === "B"),
+		];
 	});
 	const selectedPlacement = $(
 		() => {
@@ -1530,6 +1533,7 @@ export function createPipewareEditor2D(context) {
 		const physicalTileSize = tileSizeValue.value;
 		const items = pipewarePlacements.value.map((placement) => {
 			const selected = placement.id === selectedPlacementId;
+			const isBridge = placement.type === "B";
 			const notchDepth = tileSize * PIPEWARE_OPENING_MASK_STROKE_UNITS;
 			const bodyGeometry = createPipewareBodyGeometry(placement, tileSize, pad);
 			const bounds = createPipewareBoundsRect(placement, tileSize, pad);
@@ -1562,6 +1566,7 @@ export function createPipewareEditor2D(context) {
 			const portClipShapes = bodyGeometry.portClipShapes ?? [];
 			return {
 				id: placement.id,
+				placementType: placement.type,
 				renderKey,
 				maskId: `uw-mask-${placement.id}-${placement.anchor.tx}-${placement.anchor.ty}-${placement.rotation}-${paramSignature.replaceAll(";", "-")}`,
 				selected,
@@ -1587,19 +1592,29 @@ export function createPipewareEditor2D(context) {
 				directionMarkers: bodyGeometry.directionMarkers ?? [],
 				directionMarkerFill: backgroundIsDark ? "#e0f2fe" : "#0f172a",
 				directionMarkerOpacity: selected ? 0.36 : 0.26,
-				stroke: backgroundIsDark
-					? selected
-						? "#38bdf8"
-						: "#2563eb"
-					: selected
-						? "#1d4ed8"
-						: "#3b82f6",
+				groupOpacity: isBridge ? (selected ? 0.82 : 0.68) : 1,
+				stroke: isBridge
+					? backgroundIsDark
+						? selected
+							? "#f59e0b"
+							: "#d97706"
+						: selected
+							? "#b45309"
+							: "#f59e0b"
+					: backgroundIsDark
+						? selected
+							? "#38bdf8"
+							: "#2563eb"
+						: selected
+							? "#1d4ed8"
+							: "#3b82f6",
 				hasMask: notchShapes.length > 0 || portClipShapes.length > 0,
 				notchShapes,
 				portClipShapes,
 			};
 		});
 		if (previewPlacement) {
+			const isBridge = previewPlacement.type === "B";
 			const bodyGeometry = createPipewareBodyGeometry(
 				previewPlacement,
 				tileSize,
@@ -1615,6 +1630,7 @@ export function createPipewareEditor2D(context) {
 			const portClipShapes = bodyGeometry.portClipShapes ?? [];
 			items.push({
 				id: "__pipeware-placement-preview",
+				placementType: previewPlacement.type,
 				renderKey,
 				maskId: `uw-preview-mask-${renderKey.replaceAll(":", "-")}`,
 				selected: false,
@@ -1640,15 +1656,30 @@ export function createPipewareEditor2D(context) {
 				directionMarkers: bodyGeometry.directionMarkers ?? [],
 				directionMarkerFill: backgroundIsDark ? "#e0f2fe" : "#0f172a",
 				directionMarkerOpacity: 0.18,
-				stroke: backgroundIsDark ? "#38bdf8" : "#1d4ed8",
+				stroke: isBridge
+					? backgroundIsDark
+						? "#f59e0b"
+						: "#b45309"
+					: backgroundIsDark
+						? "#38bdf8"
+						: "#1d4ed8",
 				groupOpacity: 0.34,
 				hasMask: portClipShapes.length > 0,
 				notchShapes: [],
 				portClipShapes,
 			});
 		}
-		return items;
+		return [
+			...items.filter((item) => item.placementType !== "B"),
+			...items.filter((item) => item.placementType === "B"),
+		];
 	});
+	const normalPlacements = $(() =>
+		placements.value.filter((placement) => placement.placementType !== "B"),
+	);
+	const bridgePlacements = $(() =>
+		placements.value.filter((placement) => placement.placementType === "B"),
+	);
 	const selectedEdgeTargets = $(() => {
 		if (!selectedPlacement.value) return [];
 		const activeEdgeCuts = new Set(selectedPlacement.value.edgeCuts ?? []);
@@ -1747,6 +1778,8 @@ export function createPipewareEditor2D(context) {
 			emptyTiles,
 			placementHitTargets,
 			placements,
+			normalPlacements,
+			bridgePlacements,
 			selectedEdgeTargets,
 			selectedResizeHandles,
 			selectedParameterHandles,

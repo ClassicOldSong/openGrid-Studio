@@ -36,6 +36,8 @@ import {
 	createPipewareInnerCutProfile,
 	createPipewareOuterProfile,
 	getPipewareChannelWidth,
+	offsetPolygonInward,
+	polygonArea,
 } from "./geometry/profiles.js";
 import {
 	buildSweepMesh,
@@ -72,6 +74,134 @@ function unionAll(Manifold, items) {
 	if (!items.length) return emptyManifold(Manifold);
 	if (items.length === 1) return items[0];
 	return Manifold.union(items);
+}
+
+function shiftProfileZ(profile, zOffset = 0) {
+	if (!zOffset) return profile;
+	return profile.map(([offset, z]) => [offset, z + zOffset]);
+}
+
+function getPipewarePlacementZOffset(placement) {
+	return 0;
+}
+
+function getPipewareBridgeDrop(placementOrBase) {
+	const params = placementOrBase?.params ?? {};
+	const clearance = Number(params.bridgeClearanceValue);
+	return Number.isFinite(clearance) && clearance > 0 ? clearance : 0;
+}
+
+function getPipewareBridgeTransitionUnits(base) {
+	return 1;
+}
+
+function getPipewareBridgeZOffsetAtX(base, x) {
+	if (base?.type !== "B") return 0;
+	const drop = getPipewareBridgeDrop(base);
+	if (drop <= 0) return 0;
+	const length = Math.max(0, Number(base?.width) || 0);
+	const transition = getPipewareBridgeTransitionUnits(base);
+	const clampedX = Math.max(0, Math.min(length, Number(x) || 0));
+	if (clampedX <= transition) return -drop * (clampedX / transition);
+	if (clampedX >= length - transition) {
+		return -drop * ((length - clampedX) / transition);
+	}
+	return -drop;
+}
+
+function getPipewareBridgeOpeningCutZOffsetAtX(base, x) {
+	if (base?.type !== "B") return 0;
+	const drop = getPipewareBridgeDrop(base);
+	if (drop <= 0) return 0;
+	const length = Math.max(0, Number(base?.width) || 0);
+	const transition = getPipewareBridgeTransitionUnits(base);
+	const clampedX = Math.max(0, Math.min(length, Number(x) || 0));
+	return clampedX > transition && clampedX < length - transition ? -drop : 0;
+}
+
+function getPipewareBridgeOpeningCutZOffsetAtPlacementPoint(placement, base, point) {
+	if (base?.type !== "B") return 0;
+	const turns = normalizePipewareRotation(placement.rotation) / 90;
+	const boundsWidth = turns % 2 === 0 ? base.width : base.height;
+	const boundsHeight = turns % 2 === 0 ? base.height : base.width;
+	const basePoint = rotateLocalPointCCWNTimes(
+		point.x,
+		point.y,
+		boundsWidth,
+		boundsHeight,
+		(4 - turns) % 4,
+	);
+	return getPipewareBridgeOpeningCutZOffsetAtX(base, basePoint.x);
+}
+
+function createPipewareBridgeAwareOuterProfile(widthMM, height, station, zOffset) {
+	return shiftProfileZ(
+		createPipewareOuterProfile(widthMM, height),
+		zOffset + (station?.zOffset ?? 0),
+	);
+}
+
+function createPipewareBridgeAwareInnerCutProfile(widthMM, height, station, zOffset) {
+	return shiftProfileZ(
+		createPipewareInnerCutProfile(widthMM, height),
+		zOffset + (station?.zOffset ?? 0),
+	);
+}
+
+function getPipewareBridgeOpeningInnerHeight(base, fallbackHeight) {
+	const openingHeight = Number(base?.params?.openingHeightValue);
+	return Number.isFinite(openingHeight) && openingHeight > 0
+		? openingHeight
+		: fallbackHeight;
+}
+
+function orientProfile(profile) {
+	return polygonArea(profile) >= 0 ? profile : profile.reverse();
+}
+
+function getPipewareBridgeBottomChamfer(widthMM, topZ, bottomZ) {
+	const desiredChamfer = PIPEWARE_TOP_CHAMFER;
+	return Math.min(
+		desiredChamfer,
+		Math.max(PIPEWARE_EPSILON, widthMM / 2 - PIPEWARE_EPSILON),
+		Math.max(PIPEWARE_EPSILON, topZ - bottomZ - PIPEWARE_EPSILON),
+	);
+}
+
+function getPipewareBridgeEndBottomChamfer(widthMM, topZ, bottomZ, lengthMM) {
+	const desiredChamfer = PIPEWARE_TOP_CHAMFER * 3.2;
+	return Math.min(
+		desiredChamfer,
+		Math.max(PIPEWARE_EPSILON, lengthMM / 2 - PIPEWARE_EPSILON),
+		Math.max(PIPEWARE_EPSILON, topZ - bottomZ - PIPEWARE_EPSILON),
+		Math.max(PIPEWARE_EPSILON, widthMM / 2 - PIPEWARE_EPSILON),
+	);
+}
+
+function createPipewareBridgeOuterProfile(widthMM, bridgeHeight, bottomZ) {
+	const topZ = getPipewareWallTopZ(bridgeHeight);
+	const chamfer = getPipewareBridgeBottomChamfer(widthMM, topZ, bottomZ);
+	return orientProfile([
+		[-widthMM / 2, topZ],
+		[-widthMM / 2, bottomZ + chamfer],
+		[-widthMM / 2 + chamfer, bottomZ],
+		[widthMM / 2 - chamfer, bottomZ],
+		[widthMM / 2, bottomZ + chamfer],
+		[widthMM / 2, topZ],
+	]);
+}
+
+function createPipewareBridgeShellCutProfile(widthMM, bridgeHeight, bottomZ) {
+	const outer = createPipewareBridgeOuterProfile(widthMM, bridgeHeight, bottomZ);
+	const shellCut = offsetPolygonInward(outer, PIPEWARE_SNAP_WALL_THICKNESS);
+	return orientProfile(shellCut);
+}
+
+function createPipewareBridgeInnerCutProfile(widthMM, bridgeHeight, openingHeight) {
+	return shiftProfileZ(
+		createPipewareInnerCutProfile(widthMM, openingHeight),
+		bridgeHeight - openingHeight,
+	);
 }
 
 function rotateLocalPointCCWNTimes(x, y, width, height, turns) {
@@ -325,6 +455,110 @@ function extendStationsAlongPath(stations, distance) {
 	return nextStations;
 }
 
+function interpolateStationAlongPathSegment(start, end, t) {
+	return {
+		...start,
+		bridgeX:
+			(start.bridgeX ?? 0) + ((end.bridgeX ?? 0) - (start.bridgeX ?? 0)) * t,
+		bridgeBottomLift:
+			(start.bridgeBottomLift ?? 0) +
+			((end.bridgeBottomLift ?? 0) - (start.bridgeBottomLift ?? 0)) * t,
+		center: [
+			start.center[0] + (end.center[0] - start.center[0]) * t,
+			start.center[1] + (end.center[1] - start.center[1]) * t,
+		],
+		normal: [
+			start.normal[0] + (end.normal[0] - start.normal[0]) * t,
+			start.normal[1] + (end.normal[1] - start.normal[1]) * t,
+		],
+		zOffset:
+			(start.zOffset ?? 0) + ((end.zOffset ?? 0) - (start.zOffset ?? 0)) * t,
+	};
+}
+
+function getStationAtPathDistance(stations, targetDistance) {
+	let travelled = 0;
+	for (let index = 0; index < stations.length - 1; index++) {
+		const start = stations[index];
+		const end = stations[index + 1];
+		const segmentLength = Math.hypot(
+			end.center[0] - start.center[0],
+			end.center[1] - start.center[1],
+		);
+		if (segmentLength <= PIPEWARE_EPSILON) continue;
+		if (travelled + segmentLength >= targetDistance - PIPEWARE_EPSILON) {
+			const t = Math.max(
+				0,
+				Math.min(1, (targetDistance - travelled) / segmentLength),
+			);
+			return interpolateStationAlongPathSegment(start, end, t);
+		}
+		travelled += segmentLength;
+	}
+	return cloneStation(stations[stations.length - 1]);
+}
+
+function insetStationsAlongPath(stations, distance) {
+	if (stations.length < 2 || distance <= 0) return stations.map(cloneStation);
+	const lengths = [0];
+	let totalLength = 0;
+	for (let index = 0; index < stations.length - 1; index++) {
+		totalLength += Math.hypot(
+			stations[index + 1].center[0] - stations[index].center[0],
+			stations[index + 1].center[1] - stations[index].center[1],
+		);
+		lengths.push(totalLength);
+	}
+	if (totalLength <= distance * 2 + PIPEWARE_EPSILON) return [];
+	const startDistance = distance;
+	const endDistance = totalLength - distance;
+	const nextStations = [getStationAtPathDistance(stations, startDistance)];
+	for (let index = 1; index < stations.length - 1; index++) {
+		if (
+			lengths[index] > startDistance + PIPEWARE_EPSILON &&
+			lengths[index] < endDistance - PIPEWARE_EPSILON
+		) {
+			nextStations.push(cloneStation(stations[index]));
+		}
+	}
+	nextStations.push(getStationAtPathDistance(stations, endDistance));
+	return nextStations;
+}
+
+function normalizeBridgeStationXs(length, xs) {
+	return xs
+		.map((x) => Math.max(0, Math.min(length, x)))
+		.sort((a, b) => a - b)
+		.filter(
+			(x, index, list) =>
+				index === 0 || Math.abs(x - list[index - 1]) > PIPEWARE_EPSILON,
+		);
+}
+
+function createBridgeStationsAtXs(placement, base, tileSize, xs) {
+	const centerY = (base.params.widthUnits ?? 1) / 2;
+	const stations = xs.map((x) => {
+		const basePoint = { x, y: centerY };
+		const center = transformBasePointToWorld(basePoint, placement, base, tileSize);
+		const tangent = transformBaseVectorToWorld(
+			basePoint,
+			{ x: 1, y: 0 },
+			placement,
+			base,
+			tileSize,
+		);
+		return {
+			bridgeX: x,
+			bridgeBottomLift: 0,
+			center,
+			normal: [-tangent[1], tangent[0]],
+			zOffset: getPipewareBridgeZOffsetAtX(base, x),
+		};
+	});
+	stations.widthUnits = base.params.widthUnits;
+	return stations;
+}
+
 function createSegmentStations(segment, placement, base, tileSize, circleSegments) {
 	if (segment.kind === "line") {
 		return createStraightStations(
@@ -357,6 +591,42 @@ function createSegmentStations(segment, placement, base, tileSize, circleSegment
 		);
 	}
 	return [];
+}
+
+function createBridgeStations(placement, base, tileSize) {
+	const length = Math.max(0, Number(base.width) || 0);
+	if (length <= PIPEWARE_EPSILON) return [];
+	const transition = getPipewareBridgeTransitionUnits(base);
+	const xs = normalizeBridgeStationXs(length, [
+		0,
+		transition,
+		length - transition,
+		length,
+	]);
+	const stations = createBridgeStationsAtXs(placement, base, tileSize, xs);
+	return stations;
+}
+
+function createBridgeBodyStations(placement, base, tileSize, endBottomChamfer) {
+	const length = Math.max(0, Number(base.width) || 0);
+	if (length <= PIPEWARE_EPSILON) return [];
+	const transition = getPipewareBridgeTransitionUnits(base);
+	const chamferUnits = endBottomChamfer / tileSize;
+	const xs = normalizeBridgeStationXs(length, [
+		0,
+		chamferUnits,
+		transition,
+		length - transition,
+		length - chamferUnits,
+		length,
+	]);
+	const stations = createBridgeStationsAtXs(placement, base, tileSize, xs);
+	for (const station of stations) {
+		const distanceFromEnd =
+			Math.min(station.bridgeX, length - station.bridgeX) * tileSize;
+		station.bridgeBottomLift = Math.max(0, endBottomChamfer - distanceFromEnd);
+	}
+	return stations;
 }
 
 function getPlacementPathStationGroups(
@@ -418,7 +688,7 @@ function buildStraightGripStations(
 	return createStraightStations(end, start, placement, base, tileSize);
 }
 
-function buildGripEndCutModels(Manifold, stations, profile, height) {
+function buildGripEndCutModels(Manifold, stations, profile, height, zOffset = 0) {
 	if (stations.length < 2) return [];
 	const first = stations[0];
 	const last = stations[stations.length - 1];
@@ -430,7 +700,7 @@ function buildGripEndCutModels(Manifold, stations, profile, height) {
 	const offsets = profile.map(([offset]) => offset);
 	const minOffset = Math.min(...offsets) - PIPEWARE_NUDGE;
 	const maxOffset = Math.max(...offsets) + PIPEWARE_NUDGE;
-	const gripTopZ = getPipewareGripTopZ(height);
+	const gripTopZ = getPipewareGripTopZ(height) + zOffset;
 	const zTop = gripTopZ + PIPEWARE_NUDGE;
 	const zLow = gripTopZ - PIPEWARE_SNAP_WALL_THICKNESS - PIPEWARE_NUDGE;
 	const cutLength = PIPEWARE_SNAP_WALL_THICKNESS + PIPEWARE_NUDGE;
@@ -464,12 +734,17 @@ function buildGripModel(
 	profile,
 	stations,
 	height,
+	zOffset = 0,
 ) {
 	const grip = buildSweepMesh(Manifold, Mesh, triangulate, profile, stations);
 	if (!grip || grip.isEmpty()) return null;
-	const cuts = buildGripEndCutModels(Manifold, stations, profile, height).filter(
-		(cut) => !cut.isEmpty(),
-	);
+	const cuts = buildGripEndCutModels(
+		Manifold,
+		stations,
+		profile,
+		height,
+		zOffset,
+	).filter((cut) => !cut.isEmpty());
 	if (!cuts.length) return grip;
 	return grip.subtract(unionAll(Manifold, cuts));
 }
@@ -483,6 +758,7 @@ function addStraightGripModels(
 	base,
 	tileSize,
 	height,
+	zOffset = 0,
 ) {
 	const widthMM = getPipewareChannelWidth(tileSize, base.params.widthUnits);
 	const gripSize = getPipewareGripSize(tileSize);
@@ -495,7 +771,10 @@ function addStraightGripModels(
 		const startX = index + gripSpacing / tileSize;
 		const endX = index + (gripSize + gripSpacing) / tileSize;
 		for (const side of [-1, 1]) {
-			const profile = createPipewareGripProfile(widthMM, side, height);
+			const profile = shiftProfileZ(
+				createPipewareGripProfile(widthMM, side, height),
+				zOffset,
+			);
 			const grip = buildGripModel(
 				Manifold,
 				Mesh,
@@ -509,6 +788,60 @@ function addStraightGripModels(
 					tileSize,
 				),
 				height,
+				zOffset,
+			);
+			if (grip && !grip.isEmpty()) models.push(grip);
+		}
+	}
+}
+
+function addBridgeGripModels(
+	models,
+	Manifold,
+	Mesh,
+	triangulate,
+	placement,
+	base,
+	tileSize,
+	height,
+) {
+	const widthMM = getPipewareChannelWidth(tileSize, base.params.widthUnits);
+	const gripSize = getPipewareGripSize(tileSize);
+	const gripSpacing = getPipewareGripSpacingFromChannel(tileSize);
+	const lengthUnits = base.width ?? (base.params.lengthUnits ?? 1) + 2;
+	const centerY = base.params.widthUnits / 2;
+	if (lengthUnits * tileSize <= gripSize) return;
+	const spans = [
+		{
+			startX: gripSpacing / tileSize,
+			endX: (gripSize + gripSpacing) / tileSize,
+		},
+		{
+			startX: lengthUnits - (gripSize + gripSpacing) / tileSize,
+			endX: lengthUnits - gripSpacing / tileSize,
+		},
+	].filter(
+		(span) =>
+			span.startX >= -PIPEWARE_EPSILON &&
+			span.endX <= lengthUnits + PIPEWARE_EPSILON &&
+			span.endX - span.startX > PIPEWARE_EPSILON,
+	);
+	for (const span of spans) {
+		for (const side of [-1, 1]) {
+			const grip = buildGripModel(
+				Manifold,
+				Mesh,
+				triangulate,
+				createPipewareGripProfile(widthMM, side, height),
+				buildStraightGripStations(
+					{ x: span.startX, y: centerY },
+					{ x: span.endX, y: centerY },
+					placement,
+					base,
+					tileSize,
+				),
+				height,
+				0,
 			);
 			if (grip && !grip.isEmpty()) models.push(grip);
 		}
@@ -524,6 +857,7 @@ function addCornerGripModels(
 	base,
 	tileSize,
 	height,
+	zOffset = 0,
 ) {
 	if (base.type !== "L") return;
 	const widthMM = getPipewareChannelWidth(tileSize, base.params.widthUnits);
@@ -535,7 +869,10 @@ function addCornerGripModels(
 			const startX = index + gripSpacing / tileSize;
 			const endX = index + (gripSize + gripSpacing) / tileSize;
 			for (const side of [-1, 1]) {
-				const profile = createPipewareGripProfile(widthMM, side, height);
+				const profile = shiftProfileZ(
+					createPipewareGripProfile(widthMM, side, height),
+					zOffset,
+				);
 				const grip = buildGripModel(
 					Manifold,
 					Mesh,
@@ -549,6 +886,7 @@ function addCornerGripModels(
 						tileSize,
 					),
 					height,
+					zOffset,
 				);
 				if (grip && !grip.isEmpty()) models.push(grip);
 			}
@@ -562,7 +900,10 @@ function addCornerGripModels(
 			index +
 			(gripSize + gripSpacing) / tileSize;
 		for (const side of [-1, 1]) {
-			const profile = createPipewareGripProfile(widthMM, side, height);
+			const profile = shiftProfileZ(
+				createPipewareGripProfile(widthMM, side, height),
+				zOffset,
+			);
 			const grip = buildGripModel(
 				Manifold,
 				Mesh,
@@ -576,6 +917,7 @@ function addCornerGripModels(
 					tileSize,
 				),
 				height,
+				zOffset,
 			);
 			if (grip && !grip.isEmpty()) models.push(grip);
 		}
@@ -604,6 +946,7 @@ function addLineSegmentGripModels(
 	tileSize,
 	height,
 	segment,
+	zOffset = 0,
 ) {
 	const lengthUnits = Math.hypot(
 		segment.end.x - segment.start.x,
@@ -623,7 +966,10 @@ function addLineSegmentGripModels(
 		const start = interpolateLinePoint(segment, startDistance);
 		const end = interpolateLinePoint(segment, endDistance);
 		for (const side of [-1, 1]) {
-			const profile = createPipewareGripProfile(widthMM, side, height);
+			const profile = shiftProfileZ(
+				createPipewareGripProfile(widthMM, side, height),
+				zOffset,
+			);
 			const grip = buildGripModel(
 				Manifold,
 				Mesh,
@@ -631,6 +977,7 @@ function addLineSegmentGripModels(
 				profile,
 				buildStraightGripStations(start, end, placement, base, tileSize),
 				height,
+				zOffset,
 			);
 			if (grip && !grip.isEmpty()) models.push(grip);
 		}
@@ -741,8 +1088,22 @@ function addPlacementGripModels(
 	base,
 	tileSize,
 	height,
+	zOffset = 0,
 ) {
 	if (!base.geometry) {
+		if (base.type === "B") {
+			addBridgeGripModels(
+				models,
+				Manifold,
+				Mesh,
+				triangulate,
+				placement,
+				base,
+				tileSize,
+				height,
+			);
+			return;
+		}
 		if (base.type === "I") {
 			addStraightGripModels(
 				models,
@@ -753,6 +1114,7 @@ function addPlacementGripModels(
 				base,
 				tileSize,
 				height,
+				zOffset,
 			);
 		} else {
 			addCornerGripModels(
@@ -764,6 +1126,7 @@ function addPlacementGripModels(
 				base,
 				tileSize,
 				height,
+				zOffset,
 			);
 		}
 		return;
@@ -779,6 +1142,7 @@ function addPlacementGripModels(
 			tileSize,
 			height,
 			segment,
+			zOffset,
 		);
 	}
 }
@@ -810,6 +1174,7 @@ function getOpeningCutHalfWidth(tileSize) {
 function createOpeningCutProfile(tangentOffset, height, tileSize) {
 	const halfDepth = getPipewareOpeningCutDepth(tileSize) / 2;
 	const halfWidth = getOpeningCutHalfWidth(tileSize);
+	const zOvercut = PIPEWARE_BOOLEAN_OVERLAP + 3;
 	const cutoutChamfer = getPipewareCordCutoutChamfer(tileSize);
 	const cornerRadius = Math.min(
 		cutoutChamfer,
@@ -829,7 +1194,7 @@ function createOpeningCutProfile(tangentOffset, height, tileSize) {
 				);
 	const zLow =
 		PIPEWARE_SNAP_WALL_THICKNESS + PIPEWARE_OPENING_COVER_CLEARANCE;
-	const zHigh = getPipewareWallTopZ(height) + PIPEWARE_BOOLEAN_OVERLAP;
+	const zHigh = getPipewareWallTopZ(height) + zOvercut;
 	const zMin = Math.min(zLow + edgeInset, zHigh - PIPEWARE_EPSILON);
 	const zMax = Math.max(zMin + PIPEWARE_EPSILON, zHigh);
 	return [
@@ -838,6 +1203,13 @@ function createOpeningCutProfile(tangentOffset, height, tileSize) {
 		[halfDepth, zMax],
 		[-halfDepth, zMax],
 	];
+}
+
+function createShiftedOpeningCutProfile(tangentOffset, height, tileSize, zOffset) {
+	return shiftProfileZ(
+		createOpeningCutProfile(tangentOffset, height, tileSize),
+		zOffset,
+	);
 }
 
 function getOpeningCutTangentOffsets(tileSize, circleSegments) {
@@ -924,6 +1296,10 @@ function buildOpeningCutStationsFromLocalCenterLine(
 		base,
 		tileSize,
 	);
+	const zOffset =
+		base.type === "B"
+			? getPipewareBridgeOpeningCutZOffsetAtX(base, centerLocal.x)
+			: 0;
 	return getOpeningCutTangentOffsets(tileSize, circleSegments).map((offset) => ({
 		center: [
 			center[0] + tangentWorld[0] * offset,
@@ -931,6 +1307,7 @@ function buildOpeningCutStationsFromLocalCenterLine(
 		],
 		normal,
 		tangentOffset: offset,
+		zOffset,
 	}));
 }
 
@@ -987,6 +1364,7 @@ function pushSampledOpeningCutStations(
 
 function buildStraightOpeningCutStations(
 	placement,
+	base,
 	edgeKey,
 	tileSize,
 	circleSegments,
@@ -1023,6 +1401,14 @@ function buildStraightOpeningCutStations(
 		{ x: lineDx, y: lineDy },
 		tileSize,
 	);
+	const stationZOffset =
+		base.type === "B"
+			? getPipewareBridgeOpeningCutZOffsetAtPlacementPoint(
+					placement,
+					base,
+					centerLocal,
+				)
+			: 0;
 	return getOpeningCutTangentOffsets(tileSize, circleSegments).map((offset) => ({
 		center: [
 			center[0] + tangentWorld[0] * offset,
@@ -1030,6 +1416,7 @@ function buildStraightOpeningCutStations(
 		],
 		normal,
 		tangentOffset: offset,
+		zOffset: stationZOffset,
 	}));
 }
 
@@ -1205,6 +1592,7 @@ function buildOpeningCutStationGroupsForEdgeKey(
 	return [
 		buildStraightOpeningCutStations(
 			placement,
+			base,
 			edgeKey,
 			tileSize,
 			circleSegments,
@@ -1474,6 +1862,7 @@ function buildOpeningCutModels(
 	tileSize,
 	height,
 	circleSegments,
+	zOffset = 0,
 ) {
 	const cuts = [];
 	for (const candidateGroup of buildOpeningCutCandidateGroups(
@@ -1496,7 +1885,12 @@ function buildOpeningCutModels(
 		for (const stations of stationGroups) {
 			const orientedStations = normalizeOpeningCutStationOrientation(stations);
 			const profiles = orientedStations.map((station) =>
-				createOpeningCutProfile(station.tangentOffset ?? 0, height, tileSize),
+				createShiftedOpeningCutProfile(
+					station.tangentOffset ?? 0,
+					height,
+					tileSize,
+					zOffset + (station.zOffset ?? 0),
+				),
 			);
 			const cut = buildVariableProfileSweepMesh(
 				Manifold,
@@ -1517,6 +1911,11 @@ function getPipewareChannelStationGroups(
 	tileSize,
 	circleSegments,
 ) {
+	if (base.type === "B") {
+		return [createBridgeStations(placement, base, tileSize)].filter(
+			(stations) => stations.length >= 2,
+		);
+	}
 	if (base.type === "S") {
 		return getPlacementSegmentStationGroups(
 			placement,
@@ -1564,6 +1963,7 @@ function buildPipewareChannelShellModel(
 	tileSize,
 	height,
 	circleSegments,
+	zOffset = 0,
 ) {
 	const stationGroups = getPipewareChannelStationGroups(
 		placement,
@@ -1573,14 +1973,34 @@ function buildPipewareChannelShellModel(
 	);
 	const outerModels = stationGroups
 		.map((stations) => {
-			const profile = createPipewareOuterProfile(
-				getPipewareChannelWidth(
-					tileSize,
-					stations.widthUnits ?? base.params.widthUnits,
-				),
-				height,
+			const widthMM = getPipewareChannelWidth(
+				tileSize,
+				stations.widthUnits ?? base.params.widthUnits,
 			);
-			return buildSweepMesh(Manifold, Mesh, triangulate, profile, stations);
+			const profile = createPipewareOuterProfile(widthMM, height);
+			if (stations.some((station) => station.zOffset)) {
+				return buildVariableProfileSweepMesh(
+					Manifold,
+					Mesh,
+					triangulate,
+					stations.map((station) =>
+						createPipewareBridgeAwareOuterProfile(
+							widthMM,
+							height,
+							station,
+							zOffset,
+						),
+					),
+					stations,
+				);
+			}
+			return buildSweepMesh(
+				Manifold,
+				Mesh,
+				triangulate,
+				shiftProfileZ(profile, zOffset),
+				stations,
+			);
 		})
 		.filter((model) => model && !model.isEmpty());
 	return outerModels.length ? unionAll(Manifold, outerModels) : null;
@@ -1595,6 +2015,7 @@ function buildPipewareChannelInnerCutModels(
 	tileSize,
 	height,
 	circleSegments,
+	zOffset = 0,
 ) {
 	return getPipewareInnerCutStationGroups(
 		placement,
@@ -1610,15 +2031,205 @@ function buildPipewareChannelInnerCutModels(
 				),
 				height,
 			);
+			const extendedStations = extendStationsAlongPath(
+				stations,
+				PIPEWARE_BOOLEAN_OVERLAP,
+			);
+			if (extendedStations.some((station) => station.zOffset)) {
+				return buildVariableProfileSweepMesh(
+					Manifold,
+					Mesh,
+					triangulate,
+					extendedStations.map((station) =>
+						createPipewareBridgeAwareInnerCutProfile(
+							getPipewareChannelWidth(
+								tileSize,
+								stations.widthUnits ?? base.params.widthUnits,
+							),
+							height,
+							station,
+							zOffset,
+						),
+					),
+					extendedStations,
+				);
+			}
 			return buildSweepMesh(
 				Manifold,
 				Mesh,
 				triangulate,
-				innerCutProfile,
-				extendStationsAlongPath(stations, PIPEWARE_BOOLEAN_OVERLAP),
+				shiftProfileZ(innerCutProfile, zOffset),
+				extendedStations,
 			);
 		})
 		.filter((model) => model && !model.isEmpty());
+}
+
+function buildPipewareBridgeClearanceCutModel(
+	Manifold,
+	Mesh,
+	triangulate,
+	placement,
+	base,
+	tileSize,
+	bridgeHeight,
+	drop,
+) {
+	if (drop <= PIPEWARE_EPSILON) return null;
+	const zClearance = PIPEWARE_BOOLEAN_OVERLAP;
+	const cutTotalHeight = Math.max(PIPEWARE_EPSILON, drop - 7.4);
+	const cutProfileHeight = cutTotalHeight + zClearance;
+	const cutProfileTopZ = PIPEWARE_TOP_CHAMFER + cutProfileHeight;
+	const cutStartZ = getPipewareWallTopZ(bridgeHeight);
+	const fullWidthBlocks =
+		base.width ?? (base.params.lengthUnits ?? 1) + 2;
+	const cutWidthBlocks = Math.max(
+		PIPEWARE_EPSILON,
+		fullWidthBlocks - 2,
+	);
+	const widthMM = Math.max(PIPEWARE_EPSILON, cutWidthBlocks * tileSize);
+	const centerX = (base.width ?? 0) / 2;
+	const start = { x: centerX, y: -1 };
+	const end = {
+		x: centerX,
+		y: (base.params.widthUnits ?? 1) + 1,
+	};
+	const stations = createStraightStations(start, end, placement, base, tileSize);
+	return buildSweepMesh(
+		Manifold,
+		Mesh,
+		triangulate,
+		shiftProfileZ(
+			createPipewareOuterProfile(widthMM, cutProfileHeight),
+			cutStartZ - cutProfileTopZ,
+		),
+		stations,
+	);
+}
+
+function buildPipewareBridgePlacementModel(
+	Manifold,
+	Mesh,
+	triangulate,
+	placement,
+	base,
+	tileSize,
+	height,
+	circleSegments,
+) {
+	const drop = getPipewareBridgeDrop(base);
+	const widthMM = getPipewareChannelWidth(tileSize, base.params.widthUnits);
+	const openingHeight = getPipewareBridgeOpeningInnerHeight(base, height);
+	const bridgeBottomZ = -drop;
+	const topZ = getPipewareWallTopZ(height);
+	const endBottomChamfer = getPipewareBridgeEndBottomChamfer(
+		widthMM,
+		topZ,
+		bridgeBottomZ,
+		(base.width ?? 0) * tileSize,
+	);
+	const stations = createBridgeBodyStations(
+		placement,
+		base,
+		tileSize,
+		endBottomChamfer,
+	);
+	if (stations.length < 2) return null;
+	const solidBlock = buildVariableProfileSweepMesh(
+		Manifold,
+		Mesh,
+		triangulate,
+		stations.map((station) =>
+			createPipewareBridgeOuterProfile(
+				widthMM,
+				height,
+				bridgeBottomZ + (station.bridgeBottomLift ?? 0),
+			),
+		),
+		stations,
+	);
+	if (!solidBlock || solidBlock.isEmpty()) return null;
+
+	const shellCutStations = insetStationsAlongPath(
+		stations,
+		PIPEWARE_SNAP_WALL_THICKNESS,
+	);
+	const shellCut = buildVariableProfileSweepMesh(
+		Manifold,
+		Mesh,
+		triangulate,
+		shellCutStations.map((station) =>
+			createPipewareBridgeShellCutProfile(
+				widthMM,
+				height,
+				bridgeBottomZ + (station.bridgeBottomLift ?? 0),
+			),
+		),
+		shellCutStations,
+	);
+	const shell =
+		shellCut && !shellCut.isEmpty()
+			? solidBlock.subtract(shellCut)
+			: solidBlock;
+	if (!shell || shell.isEmpty()) return null;
+
+	const innerStations = extendStationsAlongPath(
+		stations,
+		PIPEWARE_BOOLEAN_OVERLAP,
+	);
+	const innerCut = buildVariableProfileSweepMesh(
+		Manifold,
+		Mesh,
+		triangulate,
+		innerStations.map(() =>
+			createPipewareBridgeInnerCutProfile(widthMM, height, openingHeight),
+		),
+		innerStations,
+	);
+
+	const clearanceCut = buildPipewareBridgeClearanceCutModel(
+		Manifold,
+		Mesh,
+		triangulate,
+		placement,
+		base,
+		tileSize,
+		height,
+		drop,
+	);
+	let body = shell;
+	if (clearanceCut && !clearanceCut.isEmpty()) {
+		body = body.subtract(clearanceCut);
+	}
+	if (innerCut && !innerCut.isEmpty()) {
+		body = body.subtract(innerCut);
+	}
+	const openingCutModels = buildOpeningCutModels(
+		Manifold,
+		Mesh,
+		triangulate,
+		placement,
+		base,
+		tileSize,
+		height,
+		circleSegments,
+		0,
+	);
+	if (openingCutModels.length) {
+		body = body.subtract(unionAll(Manifold, openingCutModels));
+	}
+	const models = [body];
+	addBridgeGripModels(
+		models,
+		Manifold,
+		Mesh,
+		triangulate,
+		placement,
+		base,
+		tileSize,
+		height,
+	);
+	return unionAll(Manifold, models);
 }
 
 function buildPipewarePlacementModel(
@@ -1631,6 +2242,19 @@ function buildPipewarePlacementModel(
 	circleSegments,
 ) {
 	const base = getPlacementBaseDimensions(placement);
+	if (base.type === "B") {
+		return buildPipewareBridgePlacementModel(
+			Manifold,
+			Mesh,
+			triangulate,
+			placement,
+			base,
+			tileSize,
+			height,
+			circleSegments,
+		);
+	}
+	const zOffset = getPipewarePlacementZOffset(placement);
 	const shell = buildPipewareChannelShellModel(
 		Manifold,
 		Mesh,
@@ -1640,6 +2264,7 @@ function buildPipewarePlacementModel(
 		tileSize,
 		height,
 		circleSegments,
+		zOffset,
 	);
 	if (!shell || shell.isEmpty()) return null;
 	const cutModels = buildOpeningCutModels(
@@ -1651,6 +2276,7 @@ function buildPipewarePlacementModel(
 		tileSize,
 		height,
 		circleSegments,
+		zOffset,
 	);
 	const cutShell = cutModels.length
 		? shell.subtract(unionAll(Manifold, cutModels))
@@ -1665,6 +2291,7 @@ function buildPipewarePlacementModel(
 		base,
 		tileSize,
 		height,
+		zOffset,
 	);
 	let model = unionAll(Manifold, models);
 	const innerCutModels = buildPipewareChannelInnerCutModels(
@@ -1676,6 +2303,7 @@ function buildPipewarePlacementModel(
 		tileSize,
 		height,
 		circleSegments,
+		zOffset,
 	);
 	if (innerCutModels.length) {
 		model = model.subtract(unionAll(Manifold, innerCutModels));
@@ -1752,18 +2380,27 @@ async function buildPipewarePlacementModels(config = {}) {
 
 	const parts = placements
 		.map((placement, index) => {
+			const height = resolvePipewarePlacementInnerHeight(
+				placement,
+				boardInnerHeight,
+			);
 			const model = buildPipewarePlacementModel(
 				Manifold,
 				Mesh,
 				triangulate,
 				placement,
 				tileSize,
-				resolvePipewarePlacementInnerHeight(placement, boardInnerHeight),
+				height,
 				circleSegments,
 			);
-			return model && !model.isEmpty()
+			const zShift = boardInnerHeight - height;
+			const anchoredModel =
+				model && !model.isEmpty() && Math.abs(zShift) > PIPEWARE_EPSILON
+					? model.translate([0, 0, zShift])
+					: model;
+			return anchoredModel && !anchoredModel.isEmpty()
 				? {
-						model,
+						model: anchoredModel,
 						name: getPipewarePlacementModelName(placement, index),
 						placement,
 					}

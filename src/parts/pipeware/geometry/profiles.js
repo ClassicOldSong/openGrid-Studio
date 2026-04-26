@@ -33,7 +33,7 @@ function lineIntersection(a, b, c, d) {
 	return [a[0] + abx * t, a[1] + aby * t];
 }
 
-function offsetPolygonInward(points, distance) {
+export function offsetPolygonInward(points, distance) {
 	const area = polygonArea(points);
 	const normalSign = area >= 0 ? 1 : -1;
 	const lines = points.map((point, index) => {

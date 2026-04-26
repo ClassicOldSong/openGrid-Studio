@@ -789,7 +789,7 @@ export function createPipewareController({
 
 		if (pipewareDragSession.kind !== "resize") return;
 		const placement = pipewareDragSession.placement;
-		if (placement.type === "I") {
+		if (placement.type === "I" || placement.type === "B") {
 			const rotation = normalizePipewareRotation(placement.rotation);
 			const bounds = getPipewarePlacementBounds(placement);
 			const horizontal = rotation % 180 === 0;
@@ -1063,7 +1063,13 @@ export function createPipewareController({
 	};
 
 	const updatePipewareHover = (targetAction) => {
-		if (targetAction?.type !== "place-tile") {
+		if (
+			targetAction?.type !== "place-tile" &&
+			!(
+				pipewareActiveFeatureConfig.value.type === "B" &&
+				targetAction?.type === "placement"
+			)
+		) {
 			pipewareHoverTile.value = null;
 			return;
 		}
