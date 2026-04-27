@@ -1,9 +1,6 @@
 import { $ } from "refui";
 import { PIPEWARE_EDITOR_2D_RENDERERS } from "./renderers.jsx";
-import {
-	createPipewareBoundsRect,
-	createPipewareOpeningHint,
-} from "./placement-state.js";
+import { createPipewareBoundsRect } from "./placement-state.js";
 import {
 	getBasePipewareLGeometry,
 	getPipewareChannelThicknessUnits,
@@ -1323,7 +1320,7 @@ function createPipewareParamSignature(params = {}) {
 export function createPipewareEditor2D(context) {
 	const { app, partController } = context;
 	const { signals, constants } = app;
-	const { resolvedTheme, isMobileLayout } = signals;
+	const { resolvedTheme } = signals;
 	const {
 		width,
 		height,
@@ -1881,14 +1878,6 @@ export function createPipewareEditor2D(context) {
 					},
 				]),
 			}),
-		}),
-		viewport: Object.freeze({
-			hintText: $(() => createPipewareOpeningHint(pipewareActiveFeatureType.value)),
-			hintClass: $(() =>
-				isMobileLayout.value
-					? "pointer-events-none absolute left-1/2 top-4 z-10 w-[min(calc(100%-2rem),340px)] -translate-x-1/2 rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-center text-[11px] font-medium text-slate-500 backdrop-blur dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-400"
-					: "pointer-events-none absolute right-4 bottom-4 z-10 rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-[11px] font-medium text-slate-500 backdrop-blur dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-400",
-			),
 		}),
 		actions: Object.freeze({
 			readAction: pipewareActions.readAction,

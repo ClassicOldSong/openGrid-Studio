@@ -868,7 +868,6 @@ export async function renderOpenGridBoardPreviewMesh(config) {
 	const model = await buildDirectModel(config);
 	return {
 		mesh: buildPreviewMesh(model),
-		logs: [`openGrid board preview: Manifold (${config.fullOrLite})`],
 	};
 }
 
@@ -885,7 +884,6 @@ export async function renderOpenGridBoardExport(
 			bytes: new Uint8Array(buffer),
 			mimeType: "model/3mf",
 			extension: "3mf",
-			logs: [`openGrid board export: 3MF (${config.fullOrLite})`],
 		};
 	}
 
@@ -894,7 +892,6 @@ export async function renderOpenGridBoardExport(
 			bytes: buildAsciiStl(model),
 			mimeType: "model/stl",
 			extension: "stl",
-			logs: [`openGrid board export: ASCII STL (${config.fullOrLite})`],
 		};
 	}
 
@@ -902,6 +899,5 @@ export async function renderOpenGridBoardExport(
 		bytes: buildBinaryStl(model),
 		mimeType: "model/stl",
 		extension: "stl",
-		logs: [`openGrid board export: Binary STL (${config.fullOrLite})`],
 	};
 }

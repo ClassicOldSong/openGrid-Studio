@@ -27,25 +27,3 @@ export async function loadPartDefinition(partId = DEFAULT_PART_ID) {
 	}
 	return await PART_LOAD_CACHE.get(metadata.id);
 }
-
-export async function warmPartRenderer(partId = DEFAULT_PART_ID) {
-	const part = await loadPartDefinition(partId);
-	await part.renderer.warm();
-}
-
-export async function renderPartPreviewMesh(
-	partId = DEFAULT_PART_ID,
-	config,
-) {
-	const part = await loadPartDefinition(partId);
-	return await part.renderer.renderPreviewMesh(config);
-}
-
-export async function renderPartExport(
-	partId = DEFAULT_PART_ID,
-	config,
-	format,
-) {
-	const part = await loadPartDefinition(partId);
-	return await part.renderer.renderExport(config, format);
-}

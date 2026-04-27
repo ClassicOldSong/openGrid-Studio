@@ -1,4 +1,5 @@
 import { $, onDispose, read, signal, watch } from 'refui'
+import { createViewportHintClass } from '../ui-styles.js'
 
 function clamp(value, min, max) {
 	return Math.max(min, Math.min(max, value))
@@ -660,11 +661,13 @@ export default function Preview3D({ mesh, loading, error, theme, mobileLayout })
 			: 'rounded-xl border border-slate-200 bg-white/90 px-3 h-9 text-xs font-bold text-slate-600 backdrop-blur hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-200 dark:hover:border-slate-600'
 	)
 
-	const hintClass = $(() => {
-		if (!showHint.value || !meshSig.value) return 'hidden'
-		return mobileLayoutSig.value
-			? 'absolute left-1/2 z-10 w-[min(calc(100%-2rem),320px)] -translate-x-1/2 rounded-xl bg-white/85 border border-slate-200 px-3 py-2 text-center text-[11px] font-medium text-slate-500 backdrop-blur dark:bg-slate-950/70 dark:border-slate-700 dark:text-slate-400'
-			: 'absolute right-4 bottom-4 rounded-xl bg-white/85 border border-slate-200 px-3 py-2 text-[11px] font-medium text-slate-500 backdrop-blur dark:bg-slate-950/70 dark:border-slate-700 dark:text-slate-400'
+	const showViewportHint = $(() => {
+		const shouldShow = showHint.value
+		const mesh = meshSig.value
+		return shouldShow && !!mesh
+	})
+	const hintClass = createViewportHintClass(showViewportHint, mobileLayoutSig, {
+		mobilePlacementClass: "",
 	})
 
 	const backgroundStyle = $(() =>

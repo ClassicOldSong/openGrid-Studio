@@ -694,13 +694,3 @@ export function getPipewarePlacementStatusLabel(placement) {
 	const bounds = getPipewarePlacementBounds(placement);
 	return `${placement.type} • ${bounds.width}×${bounds.height}`;
 }
-
-export function createPipewareOpeningHint(type) {
-	if (type === "L") {
-		return "Select a corner, then tap the highlighted exposed edges to add side cut openings.";
-	}
-	if (type === "I") {
-		return "Select a straight, then tap the highlighted exposed edges to add side cut openings.";
-	}
-	return "Select a Pipeware part, then tap the highlighted exposed edges to add side cut openings.";
-}

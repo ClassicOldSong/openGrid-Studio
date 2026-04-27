@@ -42,6 +42,30 @@ export const MOBILE_FLOATING_RIGHT_STYLE =
 	`${MOBILE_FLOATING_BOTTOM_STYLE} right: calc(env(safe-area-inset-right, 0px) + 1rem);`;
 export const MOBILE_PREVIEW_CONTROLS_INSET =
 	"calc(env(safe-area-inset-bottom, 0px) + 4.75rem)";
+export const EDITOR_2D_VIEWPORT_HINT_TEXT =
+	"Drag to pan. Wheel or pinch to zoom. Click/tap to edit.";
+
+export function createViewportHintClass(
+	visible,
+	isMobileLayout,
+	{
+		mobilePlacementClass = "top-4",
+		desktopPlacementClass = "right-4 bottom-4",
+	} = {},
+) {
+	return $(() => {
+		const visibleValue = visible.value;
+		const mobile = isMobileLayout.value;
+		if (!visibleValue) return "hidden";
+		const placement = mobile
+			? `left-1/2 z-10 w-[min(calc(100%-2rem),320px)] -translate-x-1/2 text-center ${mobilePlacementClass}`
+			: desktopPlacementClass;
+		return [
+			"pointer-events-none absolute rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-[11px] font-medium text-slate-500 backdrop-blur dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-400",
+			placement,
+		].join(" ");
+	});
+}
 
 export function createThemeOptionClass(themeMode, mode) {
 	return $(() => {

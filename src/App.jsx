@@ -380,7 +380,7 @@ export default function App() {
 			const filename = part.buildExportFilename
 				? part.buildExportFilename(config, formatMeta)
 				: `${part.metadata.slug || part.metadata.id}.${formatMeta.extension}`;
-			const { bytes, mimeType, logs } = await renderExport(
+			const { bytes, mimeType } = await renderExport(
 				part.id,
 				config,
 				format,
@@ -393,7 +393,6 @@ export default function App() {
 			document.body.appendChild(element);
 			element.click();
 			document.body.removeChild(element);
-			if (logs?.length) console.info("Export:", logs.join("\n"));
 		} catch (error) {
 			console.error("Export failed.", error);
 			exportError.value =
@@ -562,6 +561,7 @@ export default function App() {
 		viewportStyle: editor2DViewportStyle,
 		baseTileSize: tileSize,
 		isWebKitEngine,
+		isMobileLayout,
 	});
 
 	watch(() => {

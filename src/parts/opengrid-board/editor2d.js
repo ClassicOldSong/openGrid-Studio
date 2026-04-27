@@ -18,7 +18,7 @@ function rectPath(x, y, w, h) {
 export function createOpenGridBoardEditor2D(context) {
 	const { app, partController } = context;
 	const { constants, signals: appSignals } = app;
-	const { resolvedTheme, isMobileLayout } = appSignals;
+	const { resolvedTheme } = appSignals;
 	const { signals, helpers, editorActions: openGridActions } = partController;
 	const { width, height, maskGrid, topo } = signals;
 	const {
@@ -245,14 +245,6 @@ export function createOpenGridBoardEditor2D(context) {
 					},
 				]),
 			}),
-		}),
-		viewport: Object.freeze({
-			hintText: "Drag to pan. Wheel or pinch to zoom. Click/tap to edit.",
-			hintClass: $(() =>
-				isMobileLayout.value
-					? "pointer-events-none absolute left-1/2 top-4 z-10 w-[min(calc(100%-2rem),320px)] -translate-x-1/2 rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-center text-[11px] font-medium text-slate-500 backdrop-blur dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-400"
-					: "pointer-events-none absolute right-4 bottom-4 z-10 rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-[11px] font-medium text-slate-500 backdrop-blur dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-400",
-			),
 		}),
 		actions: openGridActions,
 	});

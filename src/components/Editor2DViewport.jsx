@@ -1,6 +1,10 @@
 import { If } from "refui";
 import { createEditor2DNavigation } from "./editor2d-navigation.js";
 import Editor2DSvgScene from "./Editor2DSvgScene.jsx";
+import {
+	EDITOR_2D_VIEWPORT_HINT_TEXT,
+	createViewportHintClass,
+} from "../ui-styles.js";
 
 export default function Editor2DViewport({ viewport, editor }) {
 	const navigation = createEditor2DNavigation({
@@ -11,6 +15,10 @@ export default function Editor2DViewport({ viewport, editor }) {
 		readAction: editor.actions.readAction,
 		performAction: editor.actions.performAction,
 	});
+	const hintClass = createViewportHintClass(
+		navigation.showHint,
+		viewport.isMobileLayout,
+	);
 
 	return (
 		<div class="flex-1 min-h-0 relative overflow-hidden bg-white dark:bg-slate-950">
@@ -41,7 +49,7 @@ export default function Editor2DViewport({ viewport, editor }) {
 			</div>
 			<If condition={navigation.showHint}>
 				{() => (
-					<div class={editor.viewport.hintClass}>{editor.viewport.hintText}</div>
+					<div class={hintClass}>{EDITOR_2D_VIEWPORT_HINT_TEXT}</div>
 				)}
 			</If>
 		</div>

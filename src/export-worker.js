@@ -21,7 +21,6 @@ self.onmessage = async ({ data }) => {
 					id: data.id,
 					ok: true,
 					mesh: preview.mesh,
-					logs: preview.logs
 				},
 				[preview.mesh.positions.buffer, preview.mesh.indices.buffer]
 			)
@@ -48,7 +47,6 @@ self.onmessage = async ({ data }) => {
 				bytes: rendered.bytes.buffer,
 				mimeType: rendered.mimeType,
 				extension: rendered.extension,
-				logs: rendered.logs
 			},
 			[rendered.bytes.buffer]
 		)

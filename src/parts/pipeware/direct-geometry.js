@@ -2421,7 +2421,6 @@ export async function renderPipewarePreviewMesh(config) {
 	const parts = await buildPipewarePlacementModels(config);
 	return {
 		mesh: buildPreviewMeshFromModels(parts.map((part) => part.model)),
-		logs: ["Pipeware preview: Manifold"],
 	};
 }
 
@@ -2443,7 +2442,6 @@ export async function renderPipewareExport(config, format = "stl-binary") {
 			bytes: new Uint8Array(buffer),
 			mimeType: "model/3mf",
 			extension: "3mf",
-			logs: [`Pipeware export: 3MF (${parts.length} parts)`],
 		};
 	}
 
@@ -2452,7 +2450,6 @@ export async function renderPipewareExport(config, format = "stl-binary") {
 			bytes: buildAsciiStlFromModels(models, names),
 			mimeType: "model/stl",
 			extension: "stl",
-			logs: [`Pipeware export: ASCII STL (${parts.length} solids)`],
 		};
 	}
 
@@ -2460,6 +2457,5 @@ export async function renderPipewareExport(config, format = "stl-binary") {
 		bytes: buildBinaryStlFromModels(models),
 		mimeType: "model/stl",
 		extension: "stl",
-		logs: [`Pipeware export: Binary STL (${parts.length} shells)`],
 	};
 }
