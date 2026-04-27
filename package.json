@@ -12,18 +12,23 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "dev": "rspack serve --mode development",
+    "build": "rspack build --mode production",
+    "preview": "node scripts/preview-server.mjs"
   },
   "dependencies": {
     "manifold-3d": "^3.4.1",
-    "refui": "^0.17.1"
+    "refui": "^0.17.2"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.2.2",
+    "@rspack/cli": "^2.0.0",
+    "@rspack/core": "^2.0.0",
+    "@rspack/dev-server": "^2.0.1",
+    "@tailwindcss/postcss": "^4.2.4",
+    "css-loader": "^7.1.4",
+    "postcss-loader": "^8.2.1",
     "refurbish": "^0.1.8",
-    "tailwindcss": "^4.2.2",
-    "vite": "^8.0.9"
+    "style-loader": "^4.0.0",
+    "tailwindcss": "^4.2.4"
   }
 }
