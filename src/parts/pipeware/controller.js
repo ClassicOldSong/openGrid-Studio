@@ -793,6 +793,7 @@ export function createPipewareController({
 			const rotation = normalizePipewareRotation(placement.rotation);
 			const bounds = getPipewarePlacementBounds(placement);
 			const horizontal = rotation % 180 === 0;
+			const fixedEndBlocks = placement.type === "B" ? 2 : 0;
 			const deltaX = Math.round(action.sceneDX / tileSize);
 			const deltaY = Math.round(action.sceneDY / tileSize);
 			let nextLength = placement.params?.lengthUnits ?? 1;
@@ -806,15 +807,12 @@ export function createPipewareController({
 				}
 				if (pipewareDragSession.handleSide === "W") {
 					nextLength -= deltaX;
-					nextAnchorTx = placement.anchor.tx + (bounds.width - Math.max(1, nextLength));
 				}
 				if (pipewareDragSession.handleSide === "S") {
 					nextWidthUnits += deltaY;
 				}
 				if (pipewareDragSession.handleSide === "N") {
 					nextWidthUnits -= deltaY;
-					nextAnchorTy =
-						placement.anchor.ty + (bounds.height - Math.max(1, nextWidthUnits));
 				}
 			} else {
 				if (pipewareDragSession.handleSide === "S") {
@@ -822,19 +820,35 @@ export function createPipewareController({
 				}
 				if (pipewareDragSession.handleSide === "N") {
 					nextLength -= deltaY;
-					nextAnchorTy = placement.anchor.ty + (bounds.height - Math.max(1, nextLength));
 				}
 				if (pipewareDragSession.handleSide === "E") {
 					nextWidthUnits += deltaX;
 				}
 				if (pipewareDragSession.handleSide === "W") {
 					nextWidthUnits -= deltaX;
-					nextAnchorTx =
-						placement.anchor.tx + (bounds.width - Math.max(1, nextWidthUnits));
 				}
 			}
 			nextLength = Math.max(1, nextLength);
 			nextWidthUnits = Math.max(1, nextWidthUnits);
+			if (horizontal) {
+				if (pipewareDragSession.handleSide === "W") {
+					nextAnchorTx =
+						placement.anchor.tx +
+						(bounds.width - (nextLength + fixedEndBlocks));
+				}
+				if (pipewareDragSession.handleSide === "N") {
+					nextAnchorTy = placement.anchor.ty + (bounds.height - nextWidthUnits);
+				}
+			} else {
+				if (pipewareDragSession.handleSide === "N") {
+					nextAnchorTy =
+						placement.anchor.ty +
+						(bounds.height - (nextLength + fixedEndBlocks));
+				}
+				if (pipewareDragSession.handleSide === "W") {
+					nextAnchorTx = placement.anchor.tx + (bounds.width - nextWidthUnits);
+				}
+			}
 			const nextPlacement = {
 				...placement,
 				anchor: {
