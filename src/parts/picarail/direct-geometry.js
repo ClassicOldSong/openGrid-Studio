@@ -17,6 +17,14 @@ import {
 	PICA_RAIL_SHOULDER_HEIGHT,
 	PICA_RAIL_TOP_FLAT_WIDTH,
 	PICA_RAIL_TOP_WIDTH,
+	PICA_SCREW_HOLE_CONE_BOTTOM_RADIUS,
+	PICA_SCREW_HOLE_CONE_BOTTOM_Z,
+	PICA_SCREW_HOLE_CONE_TOP_Z,
+	PICA_SCREW_HOLE_HEAD_RADIUS,
+	PICA_SCREW_HOLE_RADIUS,
+	PICA_SCREW_HOLE_SEGMENTS_DEFAULT,
+	PICA_SCREW_HOLE_SEGMENTS_MAX,
+	PICA_SCREW_HOLE_SEGMENTS_MIN,
 	PICA_SLOT_DEPTH,
 	PICA_TILE_OFFSET,
 	PICA_TILE_PITCH,
@@ -79,17 +87,43 @@ function normalizeLengthConfig(config = {}) {
 	);
 	const targetLength = safeTileSize * safeTileLength;
 	const tileCount = Math.max(0, Math.floor(targetLength / PICA_TILE_PITCH));
-	const endExtension = (targetLength - tileCount * PICA_TILE_PITCH) / 2;
+	const extendEnds = config.extendEnds ?? true;
+	const endExtension = extendEnds
+		? (targetLength - tileCount * PICA_TILE_PITCH) / 2
+		: 0;
 	const railLength = tileCount * PICA_TILE_PITCH + endExtension * 2;
+	const railX = Math.max(0, (targetLength - railLength) / 2);
 
 	return {
 		tileSize: safeTileSize,
 		tileLength: safeTileLength,
 		targetLength,
+		extendEnds,
 		tileCount,
 		endExtension,
+		railX,
 		railLength: Math.max(0, railLength),
+		screwHoleTiles: sanitizeScrewHoleTiles(config.screwHoleTiles, safeTileLength),
+		screwHoleSegments: clampInteger(
+			config.screwHoleSegmentsValue ?? PICA_SCREW_HOLE_SEGMENTS_DEFAULT,
+			PICA_SCREW_HOLE_SEGMENTS_MIN,
+			PICA_SCREW_HOLE_SEGMENTS_MAX,
+			PICA_SCREW_HOLE_SEGMENTS_DEFAULT,
+		),
 	};
+}
+
+function sanitizeScrewHoleTiles(raw, tileLength) {
+	if (!Array.isArray(raw) || tileLength <= 0) return [];
+	return [
+		...new Set(
+			raw
+				.map((value) => Math.round(Number(value)))
+				.filter((value) =>
+					Number.isFinite(value) && value >= 0 && value < tileLength,
+				),
+		),
+	].sort((a, b) => a - b);
 }
 
 function buildPicaRailBase(Manifold, CrossSection, config) {
@@ -116,7 +150,7 @@ function buildPicaRailSlots(Manifold, config) {
 	const slotCenterZ = PICA_RAIL_HEIGHT - slotDepth / 2 + booleanOverlap / 2;
 	const slots = [];
 	for (let index = 0; index < config.tileCount; index++) {
-		const slotStart = config.endExtension + index * PICA_TILE_PITCH + PICA_TILE_OFFSET;
+		const slotStart = config.railX + config.endExtension + index * PICA_TILE_PITCH + PICA_TILE_OFFSET;
 		const slotCenter = slotStart + PICA_TILE_SLOT_WIDTH / 2;
 		slots.push(
 			Manifold.cube(
@@ -128,6 +162,52 @@ function buildPicaRailSlots(Manifold, config) {
 	return unionAll(Manifold, slots);
 }
 
+function buildPicaRailScrewHoleNegative(Manifold, config) {
+	const booleanOverlap = 0.2;
+	const segments = config.screwHoleSegments;
+	const lowerHeight = PICA_SCREW_HOLE_CONE_BOTTOM_Z + booleanOverlap;
+	const coneHeight =
+		PICA_SCREW_HOLE_CONE_TOP_Z - PICA_SCREW_HOLE_CONE_BOTTOM_Z;
+	const upperHeight =
+		PICA_RAIL_HEIGHT - PICA_SCREW_HOLE_CONE_TOP_Z + booleanOverlap;
+
+	return unionAll(Manifold, [
+		Manifold.cylinder(
+			lowerHeight,
+			PICA_SCREW_HOLE_RADIUS,
+			-1,
+			segments,
+		).translate(0, 0, -booleanOverlap),
+		Manifold.cylinder(
+			coneHeight,
+			PICA_SCREW_HOLE_CONE_BOTTOM_RADIUS,
+			PICA_SCREW_HOLE_HEAD_RADIUS,
+			segments,
+		).translate(0, 0, PICA_SCREW_HOLE_CONE_BOTTOM_Z),
+		Manifold.cylinder(
+			upperHeight,
+			PICA_SCREW_HOLE_HEAD_RADIUS,
+			-1,
+			segments,
+		).translate(0, 0, PICA_SCREW_HOLE_CONE_TOP_Z),
+	]);
+}
+
+function buildPicaRailScrewHoles(Manifold, config) {
+	if (!config.screwHoleTiles.length || config.railLength <= 0) {
+		return emptyManifold(Manifold);
+	}
+	const negative = buildPicaRailScrewHoleNegative(Manifold, config);
+	const holes = config.screwHoleTiles.map((tileIndex) =>
+		negative.translate(
+			tileIndex * config.tileSize + config.tileSize / 2,
+			0,
+			0,
+		),
+	);
+	return unionAll(Manifold, holes);
+}
+
 async function buildPicaRailModelFromConfig(config = {}) {
 	const { Manifold, CrossSection } = await getManifoldApi();
 	const settings = normalizeLengthConfig(config);
@@ -135,9 +215,10 @@ async function buildPicaRailModelFromConfig(config = {}) {
 	const body = buildPicaRailBase(Manifold, CrossSection, {
 		...settings,
 		railLength,
-	});
+	}).translate(settings.railX, 0, 0);
 	const cuts = buildPicaRailSlots(Manifold, settings);
-	return body.subtract(cuts);
+	const screwHoles = buildPicaRailScrewHoles(Manifold, settings);
+	return body.subtract(unionAll(Manifold, [cuts, screwHoles]));
 }
 
 export function getPicaRailConfigSummary(config = {}) {

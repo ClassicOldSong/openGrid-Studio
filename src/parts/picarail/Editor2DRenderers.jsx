@@ -45,10 +45,43 @@ export function PicaRailEditor2DLayers({ scene }) {
 					/>
 				)}
 			</For>
+			<For entries={scene.screwHoleMarkers} track="id">
+				{({ item }) => (
+					<circle
+						attr:cx={item.cx}
+						attr:cy={item.cy}
+						attr:r={item.r}
+						attr:fill={scene.screwHoleFill}
+						attr:stroke="none"
+					/>
+				)}
+			</For>
+		</g>
+	);
+}
+
+export function PicaRailEditor2DHitTargets({ scene }) {
+	return (
+		<g attr:transform={scene.contentTransform}>
+			<For entries={scene.tileHitTargets} track="id">
+				{({ item }) => (
+					<rect
+						attr:data-editor-action="screw-hole-tile"
+						attr:data-tile-index={item.tileIndex}
+						attr:x={item.x}
+						attr:y={item.y}
+						attr:width={item.width}
+						attr:height={item.height}
+						attr:fill="transparent"
+						style="cursor: pointer;"
+					/>
+				)}
+			</For>
 		</g>
 	);
 }
 
 export const PICARAIL_EDITOR_2D_RENDERERS = Object.freeze({
 	Layers: PicaRailEditor2DLayers,
+	HitTargets: PicaRailEditor2DHitTargets,
 });

@@ -13,10 +13,10 @@ function shortHash(text) {
 export function buildPicaRailExportFilename(config = {}, formatMeta) {
 	const summary = getPicaRailConfigSummary(config);
 	const tileSize = Math.round((summary.tileSize + Number.EPSILON) * 1000) / 1000;
-	const tileCount = summary.tileCount;
+	const tileLength = summary.tileLength;
 	const extension =
 		formatMeta?.extension ?? (formatMeta === "3mf" ? "3mf" : "stl");
 	const hash = shortHash(JSON.stringify(config));
 
-	return `${PICARAIL_METADATA.slug}_tile${tileSize}_count${tileCount}_${hash}.${extension}`;
+	return `${PICARAIL_METADATA.slug}_tile${tileSize}_length${tileLength}_${hash}.${extension}`;
 }
