@@ -29,7 +29,7 @@ export default function PicaRailConfigSection({ section }) {
 			<div class={SECTION_TITLE_CLASS}>Rail Profile</div>
 			<div class="grid gap-3">
 				<div class="grid gap-1">
-					<label class={FORM_LABEL_CLASS}>OpenGrid Tile Length</label>
+					<label class={FORM_LABEL_CLASS}>openGrid Tile Length</label>
 					<input
 						type="number"
 						class={COMPACT_INPUT_CLASS}
