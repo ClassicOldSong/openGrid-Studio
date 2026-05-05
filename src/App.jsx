@@ -52,6 +52,27 @@ const COUNTERSINK_DEGREE_MIN = 1;
 const MOBILE_LAYOUT_BREAKPOINT = 1200;
 const MOBILE_LAYOUT_MEDIA_QUERY = `(max-width: ${MOBILE_LAYOUT_BREAKPOINT - 1}px)`;
 const PART_OPTIONS = listPartMetadata();
+const PART_IDS = Object.freeze(new Set(PART_OPTIONS.map((part) => part.id)));
+
+function getPartIdFromHash(rawHash = null) {
+	const hash =
+		rawHash ??
+		(typeof window === "undefined" ? "" : window.location.hash);
+	const rawHashString = typeof hash === "string" ? hash : "";
+	const normalizedHash = rawHashString.startsWith("#")
+		? rawHashString.slice(1)
+		: rawHashString;
+	const candidate = normalizedHash.replace(/^\//, "").trim();
+	if (!candidate) return null;
+	try {
+		const partId = decodeURIComponent(
+			candidate.split("/")[0].split("?")[0].trim(),
+		);
+		return PART_IDS.has(partId) ? partId : null;
+	} catch {
+		return null;
+	}
+}
 
 function clamp(v, lo, hi) {
 	return Math.max(lo, Math.min(hi, v));
@@ -79,7 +100,16 @@ const configManager = createConfigManager({
 	resolvePartId: (partId) => getPartMetadata(partId).id,
 });
 
-const INITIAL_GLOBAL_CONFIG = configManager.loadGlobalConfig();
+const INITIAL_GLOBAL_CONFIG = (() => {
+	const configFromStorage = configManager.loadGlobalConfig();
+	const hashPartId = getPartIdFromHash();
+	return hashPartId
+		? configManager.normalizeGlobalConfig({
+				...configFromStorage,
+				partId: hashPartId,
+			})
+		: configFromStorage;
+})();
 
 function mergePartConfig(part, partConfig) {
 	const defaults = part.createDefaultConfig?.() ?? {};
@@ -472,7 +502,20 @@ export default function App() {
 		currentPartConfigState.value = null;
 		currentPartExportConfigState.value = {};
 		activePartId.value = metadata.id;
+		if (window.location.hash !== `#${metadata.id}`) {
+			window.location.hash = `#${metadata.id}`;
+		}
 	};
+
+	const syncActivePartFromHash = () => {
+		const hashPartId = getPartIdFromHash();
+		if (!hashPartId || hashPartId === activePartId.value) return;
+		switchActivePart(hashPartId);
+	};
+	window.addEventListener("hashchange", syncActivePartFromHash);
+	onDispose(() => {
+		window.removeEventListener("hashchange", syncActivePartFromHash);
+	});
 
 	const editor2DBoardMaterialClipId = "editor-2d-board-material-clip";
 	const editor2DNodeMaskId = "editor-2d-node-mask";
