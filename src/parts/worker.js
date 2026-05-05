@@ -1,5 +1,6 @@
 import { OPEN_GRID_BOARD_PART_ID } from "./opengrid-board/metadata.js";
 import { PIPEWARE_PART_ID } from "./pipeware/metadata.js";
+import { PICARAIL_PART_ID } from "./picarail/constants.js";
 
 export const DEFAULT_WORKER_PART_ID = OPEN_GRID_BOARD_PART_ID;
 
@@ -9,6 +10,13 @@ const WORKER_PART_LOADERS = new Map([
 		() =>
 			import("./opengrid-board/worker.js").then(
 				(module) => module.OPEN_GRID_BOARD_WORKER_PART,
+			),
+	],
+	[
+		PICARAIL_PART_ID,
+		() =>
+			import("./picarail/worker.js").then(
+				(module) => module.PICARAIL_WORKER_PART,
 			),
 	],
 	[
@@ -55,4 +63,3 @@ export async function renderWorkerPartExport(
 	const part = await loadWorkerPartDefinition(partId);
 	return await part.renderer.renderExport(config, format);
 }
-
