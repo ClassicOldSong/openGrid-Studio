@@ -16,6 +16,8 @@ export const TOGGLE_LABEL_CLASS =
 	"flex items-center gap-2 text-sm font-medium text-gray-600 cursor-pointer dark:text-slate-300";
 export const CHIP_BUTTON_CLASS =
 	"bg-gray-100 text-gray-600 rounded-lg py-1.5 px-3 text-[10px] font-bold uppercase hover:bg-gray-200 transition tracking-tight dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700";
+export const HELP_LINK_CLASS =
+	"font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200";
 export const ABOUT_BUTTON_CLASS =
 	"h-10 pr-2 text-sm font-bold text-gray-500 hover:text-gray-700 transition flex items-center dark:text-slate-400 dark:hover:text-slate-200";
 export const PRIMARY_BUTTON_CLASS =

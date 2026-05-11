@@ -27,6 +27,7 @@ function createPicaRailConfigPanel(context) {
 export const PICARAIL_FRONTEND_PART = Object.freeze({
 	id: PICARAIL_METADATA.id,
 	metadata: PICARAIL_METADATA,
+	accessories: PICARAIL_METADATA.accessories,
 	capabilities: Object.freeze({
 		preview: true,
 		exportFormats: ["stl-binary", "stl-ascii", "3mf"],

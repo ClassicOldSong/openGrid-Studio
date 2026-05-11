@@ -593,8 +593,14 @@ export default function App() {
 		const part = currentPart.value;
 		const configPanel = part?.configPanel;
 		const controller = currentPartController.value;
-		currentConfigPanelSection.value = configPanel?.create && controller
+		const panel = configPanel?.create && controller
 			? configPanel.create(createPartFrontendContext(controller))
+			: null;
+		currentConfigPanelSection.value = panel
+			? Object.freeze({
+					...panel,
+					accessories: part.accessories ?? part.metadata?.accessories ?? [],
+				})
 			: null;
 	});
 

@@ -1,6 +1,7 @@
 import { If } from "refui";
 import BoundSelect from "./BoundSelect.jsx";
 import { ThemeSwitcher } from "./AppControls.jsx";
+import PartAccessoriesSection from "./PartAccessoriesSection.jsx";
 import {
 	CHIP_BUTTON_CLASS,
 	INPUT_CLASS,
@@ -74,7 +75,10 @@ export default function ConfigPanel({ panel }) {
 									activePartConfigSection?.value ?? activePartConfigSection;
 								const ActivePartConfigSection = section?.Component ?? null;
 								return ActivePartConfigSection ? (
-									<ActivePartConfigSection section={section.section} />
+									<>
+										<ActivePartConfigSection section={section.section} />
+										<PartAccessoriesSection accessories={section.accessories} />
+									</>
 								) : null;
 							}}
 						</If>

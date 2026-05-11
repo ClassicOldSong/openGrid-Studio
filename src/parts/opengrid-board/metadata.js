@@ -5,6 +5,12 @@ export const OPEN_GRID_BOARD_METADATA = Object.freeze({
 	name: "openGrid Board",
 	description:
 		"Parametric openGrid board generation with realtime preview and direct export.",
+	accessories: Object.freeze([
+		Object.freeze({
+			name: "SuperConnect base snap",
+			url: "https://www.printables.com/model/1708514-superconnect-snaps-for-opengrid",
+		}),
+	]),
 	profileImage: "/logo.png",
 	profileImageAlt: "openGrid Studio logo",
 	kind: "board",

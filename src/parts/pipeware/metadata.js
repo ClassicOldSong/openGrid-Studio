@@ -8,6 +8,12 @@ export const PIPEWARE_METADATA = Object.freeze({
 		label: "Inspired by the Underware system by Katie",
 		url: "https://www.handsonkatie.com/underware",
 	}),
+	accessories: Object.freeze([
+		Object.freeze({
+			name: "SuperGrip snap for Pipeware",
+			url: "https://www.printables.com/model/1703971-underware-super-grip-snap-for-opengrid",
+		}),
+	]),
 	profileImage: "/logo.png",
 	profileImageAlt: "Pipeware part placeholder image",
 	kind: "board",

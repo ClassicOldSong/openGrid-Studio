@@ -512,6 +512,7 @@ export default function OpenGridBoardConfigSection({ section }) {
 					</div>
 				</div>
 			</div>
+
 		</>
 	);
 }

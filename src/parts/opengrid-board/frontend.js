@@ -36,6 +36,7 @@ function createOpenGridBoardConfigPanel(context) {
 export const OPEN_GRID_BOARD_FRONTEND_PART = Object.freeze({
 	id: OPEN_GRID_BOARD_METADATA.id,
 	metadata: OPEN_GRID_BOARD_METADATA,
+	accessories: OPEN_GRID_BOARD_METADATA.accessories,
 	capabilities: Object.freeze({
 		preview: true,
 		exportFormats: ["stl-binary", "stl-ascii", "3mf"],

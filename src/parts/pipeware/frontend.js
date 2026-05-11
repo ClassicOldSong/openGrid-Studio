@@ -42,6 +42,7 @@ function createPipewareConfigPanel(context) {
 export const PIPEWARE_FRONTEND_PART = Object.freeze({
 	id: PIPEWARE_METADATA.id,
 	metadata: PIPEWARE_METADATA,
+	accessories: PIPEWARE_METADATA.accessories,
 	capabilities: Object.freeze({
 		preview: true,
 		exportFormats: ["stl-binary", "stl-ascii", "3mf"],
