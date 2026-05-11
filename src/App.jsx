@@ -52,7 +52,7 @@ const COUNTERSINK_DEGREE_MIN = 1;
 const MOBILE_LAYOUT_BREAKPOINT = 1200;
 const MOBILE_LAYOUT_MEDIA_QUERY = `(max-width: ${MOBILE_LAYOUT_BREAKPOINT - 1}px)`;
 const PART_OPTIONS = listPartMetadata();
-const PART_IDS = Object.freeze(new Set(PART_OPTIONS.map((part) => part.id)));
+const PART_IDS = new Set(PART_OPTIONS.map((part) => part.id));
 
 function getPartIdFromHash(rawHash = null) {
 	const hash =
@@ -526,21 +526,20 @@ export default function App() {
 	);
 	const editor2DViewportClass = createEditor2DViewportClass(isMobileLayout);
 	const editor2DViewportStyle = createEditor2DViewportStyle(isMobileLayout);
-	const createPartFrontendContext = (partController) =>
-		Object.freeze({
-			app: Object.freeze({
-				signals: Object.freeze({
+	const createPartFrontendContext = (partController) => ({
+			app: {
+				signals: {
 					activePartId,
 					isMobileLayout,
 					resolvedTheme,
-				}),
-				actions: Object.freeze({
+				},
+				actions: {
 					switchActivePart,
 					clearConfiguration,
 					clampIntegerInput,
 					clampNumberInput,
-				}),
-				constants: Object.freeze({
+				},
+				constants: {
 					BOARD_DIMENSION_MIN,
 					TOP_COLUMN_MIN,
 					STACK_COUNT_MIN,
@@ -549,14 +548,14 @@ export default function App() {
 					POSITIVE_MEASUREMENT_MIN,
 					SEGMENTS_MIN,
 					COUNTERSINK_DEGREE_MIN,
-					editor2D: Object.freeze({
+					editor2D: {
 						pad,
 						tileSize,
 						editor2DBoardMaterialClipId,
 						editor2DNodeMaskId,
-					}),
-				}),
-			}),
+					},
+				},
+			},
 			partController,
 		});
 
@@ -597,21 +596,21 @@ export default function App() {
 			? configPanel.create(createPartFrontendContext(controller))
 			: null;
 		currentConfigPanelSection.value = panel
-			? Object.freeze({
+			? {
 					...panel,
 					accessories: part.accessories ?? part.metadata?.accessories ?? [],
-				})
+				}
 			: null;
 	});
 
-	const baseEditor2DViewportProps = Object.freeze({
+	const baseEditor2DViewportProps = {
 		backgroundStyle: editor2DBackgroundStyle,
 		viewportClass: editor2DViewportClass,
 		viewportStyle: editor2DViewportStyle,
 		baseTileSize: tileSize,
 		isWebKitEngine,
 		isMobileLayout,
-	});
+	};
 
 	watch(() => {
 		const editor = currentPart.value?.editors?.preview2D;
@@ -622,14 +621,14 @@ export default function App() {
 		}
 
 		const nextEditor = editor.create(createPartFrontendContext(controller));
-		currentEditor2D.value = Object.freeze({
+		currentEditor2D.value = {
 			...nextEditor,
-			viewportProps: Object.freeze({
+			viewportProps: {
 				...baseEditor2DViewportProps,
 				sceneWidth: nextEditor.scene.svgW,
 				sceneHeight: nextEditor.scene.svgH,
-			}),
-		});
+			},
+		};
 	});
 
 	let previewTimer = null;

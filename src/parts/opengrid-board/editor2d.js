@@ -158,9 +158,9 @@ export function createOpenGridBoardEditor2D(context) {
 		return parts.join(" ");
 	});
 
-	return Object.freeze({
+	return {
 		renderers: OPEN_GRID_BOARD_EDITOR_2D_RENDERERS,
-		scene: Object.freeze({
+		scene: {
 			editor2DBoardMaterialClipId,
 			editor2DNodeMaskId,
 			editor2DBoardMaterialPath,
@@ -178,15 +178,15 @@ export function createOpenGridBoardEditor2D(context) {
 			svgH,
 			pad,
 			tileSize,
-		}),
-		sharedControls: Object.freeze({
-			resize: Object.freeze({
-				theme: Object.freeze({
+		},
+		sharedControls: {
+			resize: {
+				theme: {
 					fill: editor2DResizeButtonFill,
 					stroke: editor2DResizeButtonStroke,
 					glyph: editor2DResizeButtonText,
-				}),
-				controls: Object.freeze([
+				},
+				controls: [
 					{
 						id: "top-add",
 						label: "+",
@@ -243,9 +243,9 @@ export function createOpenGridBoardEditor2D(context) {
 						cx: editor2DBottomRemoveX,
 						cy: editor2DBottomControlY,
 					},
-				]),
-			}),
-		}),
+				],
+			},
+		},
 		actions: openGridActions,
-	});
+	};
 }

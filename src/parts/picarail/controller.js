@@ -217,8 +217,8 @@ export function createPicaRailController({ initialConfig, defaults }) {
 		screwHoleTiles.value = [...current].sort((a, b) => a - b);
 	};
 
-	return Object.freeze({
-		signals: Object.freeze({
+	return {
+		signals: {
 			openGridTileSizeValue,
 			openGridTileLength,
 			extendEnds,
@@ -226,17 +226,17 @@ export function createPicaRailController({ initialConfig, defaults }) {
 			picaRailLength: maxReachableLength,
 			screwHoleTiles: normalizedScrewHoleTiles,
 			screwHoleSegmentsValue,
-		}),
-		actions: Object.freeze({
+		},
+		actions: {
 			clampIntegerInput,
 			clampNumberInput,
-		}),
-		editorActions: Object.freeze({
+		},
+		editorActions: {
 			readAction: readEditorAction,
 			performAction: performEditorAction,
-		}),
+		},
 		getConfigState,
 		buildExportConfig,
 		applyConfig,
-	});
+	};
 }

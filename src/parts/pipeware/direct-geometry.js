@@ -1420,24 +1420,24 @@ function buildStraightOpeningCutStations(
 	}));
 }
 
-const JUNCTION_CORNER_OPENING_SPECS = Object.freeze({
-	CNW: Object.freeze([
-		Object.freeze({ tangent: { x: 1, y: 0 }, outside: { x: 0, y: -1 } }),
-		Object.freeze({ tangent: { x: 0, y: 1 }, outside: { x: -1, y: 0 } }),
-	]),
-	CNE: Object.freeze([
-		Object.freeze({ tangent: { x: 1, y: 0 }, outside: { x: 0, y: -1 } }),
-		Object.freeze({ tangent: { x: 0, y: 1 }, outside: { x: 1, y: 0 } }),
-	]),
-	CSW: Object.freeze([
-		Object.freeze({ tangent: { x: 1, y: 0 }, outside: { x: 0, y: 1 } }),
-		Object.freeze({ tangent: { x: 0, y: 1 }, outside: { x: -1, y: 0 } }),
-	]),
-	CSE: Object.freeze([
-		Object.freeze({ tangent: { x: 1, y: 0 }, outside: { x: 0, y: 1 } }),
-		Object.freeze({ tangent: { x: 0, y: 1 }, outside: { x: 1, y: 0 } }),
-	]),
-});
+const JUNCTION_CORNER_OPENING_SPECS = {
+	CNW: [
+		{ tangent: { x: 1, y: 0 }, outside: { x: 0, y: -1 } },
+		{ tangent: { x: 0, y: 1 }, outside: { x: -1, y: 0 } },
+	],
+	CNE: [
+		{ tangent: { x: 1, y: 0 }, outside: { x: 0, y: -1 } },
+		{ tangent: { x: 0, y: 1 }, outside: { x: 1, y: 0 } },
+	],
+	CSW: [
+		{ tangent: { x: 1, y: 0 }, outside: { x: 0, y: 1 } },
+		{ tangent: { x: 0, y: 1 }, outside: { x: -1, y: 0 } },
+	],
+	CSE: [
+		{ tangent: { x: 1, y: 0 }, outside: { x: 0, y: 1 } },
+		{ tangent: { x: 0, y: 1 }, outside: { x: 1, y: 0 } },
+	],
+};
 
 function buildJunctionCornerOpeningCutStationGroups(
 	placement,

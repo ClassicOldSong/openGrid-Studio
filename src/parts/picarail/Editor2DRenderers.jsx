@@ -81,7 +81,7 @@ export function PicaRailEditor2DHitTargets({ scene }) {
 	);
 }
 
-export const PICARAIL_EDITOR_2D_RENDERERS = Object.freeze({
+export const PICARAIL_EDITOR_2D_RENDERERS = {
 	Layers: PicaRailEditor2DLayers,
 	HitTargets: PicaRailEditor2DHitTargets,
-});
+};

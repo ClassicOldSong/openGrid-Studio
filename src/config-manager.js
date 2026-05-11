@@ -91,7 +91,7 @@ export function createConfigManager({
 		};
 	};
 
-	const globalStorage = Object.freeze({
+	const globalStorage = {
 		load() {
 			return normalizeGlobalConfig(readJSON(storage, globalKey) ?? getLegacyConfig() ?? {});
 		},
@@ -101,9 +101,9 @@ export function createConfigManager({
 		clear() {
 			storage.removeItem(globalKey);
 		},
-	});
+	};
 
-	const partStorage = Object.freeze({
+	const partStorage = {
 		load(partId) {
 			const resolvedPartId = resolvePartId(partId);
 			const stored = readJSON(
@@ -134,14 +134,14 @@ export function createConfigManager({
 			}
 			for (const key of keys) storage.removeItem(key);
 		},
-	});
+	};
 
 	const clearLegacy = () => {
 		for (const key of legacyKeys) storage.removeItem(key);
 		legacyConfigCache = null;
 	};
 
-	return Object.freeze({
+	return {
 		globalStorage,
 		partStorage,
 		createDefaultGlobalConfig,
@@ -155,5 +155,5 @@ export function createConfigManager({
 			partStorage.clearAll();
 			clearLegacy();
 		},
-	});
+	};
 }

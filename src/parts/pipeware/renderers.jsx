@@ -279,7 +279,7 @@ export function PipewareEditor2DHitTargets({ scene }) {
 	);
 }
 
-export const PIPEWARE_EDITOR_2D_RENDERERS = Object.freeze({
+export const PIPEWARE_EDITOR_2D_RENDERERS = {
 	Layers: PipewareEditor2DLayers,
 	HitTargets: PipewareEditor2DHitTargets,
-});
+};

@@ -7,41 +7,41 @@ import { createPicaRailDefaultConfig } from "./default-config.js";
 
 function createPicaRailConfigPanel(context) {
 	const { partController: picaRail } = context;
-	return Object.freeze({
+	return {
 		Component: PicaRailConfigSection,
-		section: Object.freeze({
-			constants: Object.freeze({
+		section: {
+			constants: {
 				MEASUREMENT_MIN: context.app.constants.MEASUREMENT_MIN,
 				POSITIVE_MEASUREMENT_MIN:
 					context.app.constants.POSITIVE_MEASUREMENT_MIN,
-			}),
-			signals: Object.freeze(picaRail.signals),
-			actions: Object.freeze({
+			},
+			signals: picaRail.signals,
+			actions: {
 				clampIntegerInput: picaRail.actions.clampIntegerInput,
 				clampNumberInput: picaRail.actions.clampNumberInput,
-			}),
-		}),
-	});
+			},
+		},
+	};
 }
 
-export const PICARAIL_FRONTEND_PART = Object.freeze({
+export const PICARAIL_FRONTEND_PART = {
 	id: PICARAIL_METADATA.id,
 	metadata: PICARAIL_METADATA,
 	accessories: PICARAIL_METADATA.accessories,
-	capabilities: Object.freeze({
+	capabilities: {
 		preview: true,
 		exportFormats: ["stl-binary", "stl-ascii", "3mf"],
 		textExport: null,
-	}),
+	},
 	createDefaultConfig: createPicaRailDefaultConfig,
 	createController: createPicaRailController,
 	buildExportFilename: buildPicaRailExportFilename,
-	configPanel: Object.freeze({
+	configPanel: {
 		create: createPicaRailConfigPanel,
-	}),
-	editors: Object.freeze({
-		preview2D: Object.freeze({
+	},
+	editors: {
+		preview2D: {
 			create: createPicaRailEditor2D,
-		}),
-	}),
-});
+		},
+	},
+};

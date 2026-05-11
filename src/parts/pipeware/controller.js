@@ -1300,8 +1300,8 @@ export function createPipewareController({
 		return { type };
 	};
 
-	return Object.freeze({
-		signals: Object.freeze({
+	return {
+		signals: {
 			width,
 			height,
 			tileSizeValue,
@@ -1314,22 +1314,22 @@ export function createPipewareController({
 			pipewarePreviewPlacement,
 			pipewareSelectedPlacement,
 			pipewareSelectedPlacementLabel,
-		}),
+		},
 		applyConfig,
 		getConfigState,
 		buildExportConfig,
 		syncBoardSize,
 		updateSize,
-		configPanelActions: Object.freeze({
+		configPanelActions: {
 			updateSize,
 			setPipewareFeatureType,
 			updatePipewareFeatureParam,
 			removeSelectedPipewarePlacement,
 			deselectPipewarePlacement,
-		}),
-		editorActions: Object.freeze({
+		},
+		editorActions: {
 			readAction: readEditorAction,
 			performAction: performEditorAction,
-		}),
-	});
+		},
+	};
 }

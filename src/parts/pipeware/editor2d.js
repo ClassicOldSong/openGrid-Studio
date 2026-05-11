@@ -1762,9 +1762,9 @@ export function createPipewareEditor2D(context) {
 		() => editor2DCenterY.value + EDITOR_2D_RESIZE_BUTTON_OFFSET,
 	);
 
-	return Object.freeze({
+	return {
 		renderers: PIPEWARE_EDITOR_2D_RENDERERS,
-		scene: Object.freeze({
+		scene: {
 			pad,
 			tileSize,
 			svgW,
@@ -1811,15 +1811,15 @@ export function createPipewareEditor2D(context) {
 			resizeHandleFill: $(() => "#2563eb"),
 			resizeHandleStroke: $(() => "#ffffff"),
 			resizeHandleStrokeWidth: 2.5,
-		}),
-		sharedControls: Object.freeze({
-			resize: Object.freeze({
-				theme: Object.freeze({
+		},
+		sharedControls: {
+			resize: {
+				theme: {
 					fill: editor2DResizeButtonFill,
 					stroke: editor2DResizeButtonStroke,
 					glyph: editor2DResizeButtonText,
-				}),
-				controls: Object.freeze([
+				},
+				controls: [
 					{
 						id: "top-add",
 						label: "+",
@@ -1876,12 +1876,12 @@ export function createPipewareEditor2D(context) {
 						cx: editor2DBottomRemoveX,
 						cy: editor2DBottomControlY,
 					},
-				]),
-			}),
-		}),
-		actions: Object.freeze({
+				],
+			},
+		},
+		actions: {
 			readAction: pipewareActions.readAction,
 			performAction: pipewareActions.performAction,
-		}),
-	});
+		},
+	};
 }

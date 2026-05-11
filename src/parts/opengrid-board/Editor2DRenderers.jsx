@@ -125,8 +125,8 @@ export function OpenGridBoardEditor2DHitTargets({ scene }) {
 	);
 }
 
-export const OPEN_GRID_BOARD_EDITOR_2D_RENDERERS = Object.freeze({
+export const OPEN_GRID_BOARD_EDITOR_2D_RENDERERS = {
 	Defs: OpenGridBoardEditor2DDefs,
 	Layers: OpenGridBoardEditor2DLayers,
 	HitTargets: OpenGridBoardEditor2DHitTargets,
-});
+};

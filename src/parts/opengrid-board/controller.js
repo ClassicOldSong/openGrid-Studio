@@ -351,8 +351,8 @@ export function createOpenGridBoardController({ initialConfig, defaults }) {
 		circleSegmentsValue: circleSegmentsValue.value,
 	});
 
-	return Object.freeze({
-		signals: Object.freeze({
+	return {
+		signals: {
 			width,
 			height,
 			top1Text,
@@ -381,29 +381,29 @@ export function createOpenGridBoardController({ initialConfig, defaults }) {
 			circleSegmentsValue,
 			maskGrid,
 			topo,
-		}),
-		helpers: Object.freeze({
+		},
+		helpers: {
 			gridSize,
 			tileCoordToGrid,
 			isNodePos,
 			getMask,
 			tileFill,
 			nodeState,
-		}),
+		},
 		updateSize,
-		configPanelActions: Object.freeze({
+		configPanelActions: {
 			updateSize,
 			clampIntegerInput,
 			clampNumberInput,
 			applyTrapezoid,
 			applyHelper,
-		}),
-		editorActions: Object.freeze({
+		},
+		editorActions: {
 			readAction: readEditorAction,
 			performAction: performEditorAction,
-		}),
+		},
 		applyConfig,
 		getConfigState,
 		buildExportConfig,
-	});
+	};
 }

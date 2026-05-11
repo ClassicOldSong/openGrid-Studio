@@ -30,7 +30,7 @@ export { getBasePipewareLGeometry } from "./feature-paths.js";
 
 const PIPEWARE_ROTATION_STEP = 90;
 
-const PIPEWARE_SIDE_ROTATE_CCW = Object.freeze({
+const PIPEWARE_SIDE_ROTATE_CCW = {
 	N: "W",
 	W: "S",
 	S: "E",
@@ -45,7 +45,7 @@ const PIPEWARE_SIDE_ROTATE_CCW = Object.freeze({
 	CNE: "CNE",
 	CSW: "CSW",
 	CSE: "CSE",
-});
+};
 const PIPEWARE_FOOTPRINT_SAMPLE_RESOLUTION = 8;
 const PIPEWARE_VALID_FEATURE_TYPES = new Set(
 	PIPEWARE_FEATURE_OPTIONS.map((option) => option.value),

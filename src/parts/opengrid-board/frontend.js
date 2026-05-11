@@ -10,10 +10,10 @@ import { createOpenGridBoardDefaultConfig } from "./default-config.js";
 
 function createOpenGridBoardConfigPanel(context) {
 	const { app, partController: openGrid } = context;
-	return Object.freeze({
+	return {
 		Component: OpenGridBoardConfigSection,
-		section: Object.freeze({
-			constants: Object.freeze({
+		section: {
+			constants: {
 				BOARD_DIMENSION_MIN: app.constants.BOARD_DIMENSION_MIN,
 				TOP_COLUMN_MIN: app.constants.TOP_COLUMN_MIN,
 				STACK_COUNT_MIN: app.constants.STACK_COUNT_MIN,
@@ -22,36 +22,36 @@ function createOpenGridBoardConfigPanel(context) {
 				POSITIVE_MEASUREMENT_MIN: app.constants.POSITIVE_MEASUREMENT_MIN,
 				SEGMENTS_MIN: app.constants.SEGMENTS_MIN,
 				COUNTERSINK_DEGREE_MIN: app.constants.COUNTERSINK_DEGREE_MIN,
-			}),
-			signals: Object.freeze({
+			},
+			signals: {
 				...openGrid.signals,
-			}),
-			actions: Object.freeze({
+			},
+			actions: {
 				...openGrid.configPanelActions,
-			}),
-		}),
-	});
+			},
+		},
+	};
 }
 
-export const OPEN_GRID_BOARD_FRONTEND_PART = Object.freeze({
+export const OPEN_GRID_BOARD_FRONTEND_PART = {
 	id: OPEN_GRID_BOARD_METADATA.id,
 	metadata: OPEN_GRID_BOARD_METADATA,
 	accessories: OPEN_GRID_BOARD_METADATA.accessories,
-	capabilities: Object.freeze({
+	capabilities: {
 		preview: true,
 		exportFormats: ["stl-binary", "stl-ascii", "3mf"],
 		textExport: "scad",
-	}),
+	},
 	createDefaultConfig: createOpenGridBoardDefaultConfig,
 	createController: createOpenGridBoardController,
 	buildExportText: buildOpenGridBoardEntryScad,
 	buildExportFilename: buildOpenGridBoardExportFilename,
-	configPanel: Object.freeze({
+	configPanel: {
 		create: createOpenGridBoardConfigPanel,
-	}),
-	editors: Object.freeze({
-		preview2D: Object.freeze({
+	},
+	editors: {
+		preview2D: {
 			create: createOpenGridBoardEditor2D,
-		}),
-	}),
-});
+		},
+	},
+};

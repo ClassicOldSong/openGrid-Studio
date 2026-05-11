@@ -5,11 +5,11 @@ import {
 	warmPipewareGeometry,
 } from "./direct-geometry.js";
 
-export const PIPEWARE_WORKER_PART = Object.freeze({
+export const PIPEWARE_WORKER_PART = {
 	id: PIPEWARE_PART_ID,
-	renderer: Object.freeze({
+	renderer: {
 		warm: warmPipewareGeometry,
 		renderPreviewMesh: renderPipewarePreviewMesh,
 		renderExport: renderPipewareExport,
-	}),
-});
+	},
+};

@@ -5,12 +5,12 @@ import {
 	warmOpenGridBoardGeometry,
 } from "./direct-geometry.js";
 
-export const OPEN_GRID_BOARD_WORKER_PART = Object.freeze({
+export const OPEN_GRID_BOARD_WORKER_PART = {
 	id: OPEN_GRID_BOARD_PART_ID,
-	renderer: Object.freeze({
+	renderer: {
 		warm: warmOpenGridBoardGeometry,
 		renderPreviewMesh: renderOpenGridBoardPreviewMesh,
 		renderExport: renderOpenGridBoardExport,
-	}),
-});
+	},
+};
 

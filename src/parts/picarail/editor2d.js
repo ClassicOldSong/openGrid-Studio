@@ -157,9 +157,9 @@ export function createPicaRailEditor2D(context) {
 			r: radius,
 		}));
 	});
-	return Object.freeze({
+	return {
 		renderers: PICARAIL_EDITOR_2D_RENDERERS,
-		scene: Object.freeze({
+		scene: {
 			svgW,
 			svgH,
 			pad,
@@ -203,15 +203,15 @@ export function createPicaRailEditor2D(context) {
 				resolvedTheme.value === "dark" ? "#020617" : "#dbeafe",
 			),
 			pixelScale: PIXELS_PER_MILLIMETER,
-		}),
-		sharedControls: Object.freeze({
-			resize: Object.freeze({
-				theme: Object.freeze({
+		},
+		sharedControls: {
+			resize: {
+				theme: {
 					fill: editor2DResizeButtonFill,
 					stroke: editor2DResizeButtonStroke,
 					glyph: editor2DResizeButtonText,
-				}),
-				controls: Object.freeze([
+				},
+				controls: [
 					{
 						id: "left-add",
 						label: "+",
@@ -240,12 +240,12 @@ export function createPicaRailEditor2D(context) {
 						cx: editor2DRightControlX,
 						cy: editor2DRightRemoveY,
 					},
-				]),
-			}),
-		}),
-		actions: Object.freeze({
+				],
+			},
+		},
+		actions: {
 			readAction,
 			performAction,
-		}),
-	});
+		},
+	};
 }

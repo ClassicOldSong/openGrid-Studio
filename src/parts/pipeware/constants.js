@@ -1,128 +1,128 @@
 import { DEFAULT_TILE_DIMENSIONS } from "../shared/tile-dimensions.js";
 
-export const PIPEWARE_FEATURE_OPTIONS = Object.freeze([
-	Object.freeze({ value: "I", label: "Straight" }),
-	Object.freeze({ value: "B", label: "Bridge" }),
-	Object.freeze({ value: "L", label: "Corner" }),
-	Object.freeze({ value: "T", label: "T Junction" }),
-	Object.freeze({ value: "X", label: "Cross" }),
-	Object.freeze({ value: "S", label: "S Bend" }),
-	Object.freeze({ value: "D", label: "Diagonal" }),
-]);
+export const PIPEWARE_FEATURE_OPTIONS = [
+	{ value: "I", label: "Straight" },
+	{ value: "B", label: "Bridge" },
+	{ value: "L", label: "Corner" },
+	{ value: "T", label: "T Junction" },
+	{ value: "X", label: "Cross" },
+	{ value: "S", label: "S Bend" },
+	{ value: "D", label: "Diagonal" },
+];
 
 export const PIPEWARE_DEFAULT_BOARD_THICKNESS = 14.6;
 export const PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD = 0;
 export const PIPEWARE_THICKNESS_MIN = 0.1;
 export const PIPEWARE_THICKNESS_MAX = 80;
 
-export const PIPEWARE_PARAM_LIMITS = Object.freeze({
-	I: Object.freeze({
-		lengthUnits: Object.freeze({ min: 1, max: 24 }),
-		widthUnits: Object.freeze({ min: 1, max: 8 }),
-		zHeightValue: Object.freeze({
+export const PIPEWARE_PARAM_LIMITS = {
+	I: {
+		lengthUnits: { min: 1, max: 24 },
+		widthUnits: { min: 1, max: 8 },
+		zHeightValue: {
 			min: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
 			max: PIPEWARE_THICKNESS_MAX,
-		}),
-	}),
-	B: Object.freeze({
-		lengthUnits: Object.freeze({ min: 1, max: 24 }),
-		widthUnits: Object.freeze({ min: 1, max: 8 }),
-		bridgeClearanceValue: Object.freeze({ min: 0, max: PIPEWARE_THICKNESS_MAX }),
-		openingHeightValue: Object.freeze({
+		},
+	},
+	B: {
+		lengthUnits: { min: 1, max: 24 },
+		widthUnits: { min: 1, max: 8 },
+		bridgeClearanceValue: { min: 0, max: PIPEWARE_THICKNESS_MAX },
+		openingHeightValue: {
 			min: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
 			max: PIPEWARE_THICKNESS_MAX,
-		}),
-		zHeightValue: Object.freeze({
+		},
+		zHeightValue: {
 			min: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
 			max: PIPEWARE_THICKNESS_MAX,
-		}),
-	}),
-	L: Object.freeze({
-		lengthUnitsX: Object.freeze({ min: 0, max: 24 }),
-		lengthUnitsY: Object.freeze({ min: 0, max: 24 }),
-		addedRadiusUnits: Object.freeze({ min: 0, max: 12 }),
-		widthUnits: Object.freeze({ min: 1, max: 8 }),
-		zHeightValue: Object.freeze({
+		},
+	},
+	L: {
+		lengthUnitsX: { min: 0, max: 24 },
+		lengthUnitsY: { min: 0, max: 24 },
+		addedRadiusUnits: { min: 0, max: 12 },
+		widthUnits: { min: 1, max: 8 },
+		zHeightValue: {
 			min: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
 			max: PIPEWARE_THICKNESS_MAX,
-		}),
-	}),
-	T: Object.freeze({
-		lengthUnitsLeft: Object.freeze({ min: 0, max: 24 }),
-		lengthUnitsRight: Object.freeze({ min: 0, max: 24 }),
-		lengthUnitsY: Object.freeze({ min: 1, max: 24 }),
-		widthUnitsX: Object.freeze({ min: 1, max: 8 }),
-		widthUnitsY: Object.freeze({ min: 1, max: 8 }),
-		zHeightValue: Object.freeze({
+		},
+	},
+	T: {
+		lengthUnitsLeft: { min: 0, max: 24 },
+		lengthUnitsRight: { min: 0, max: 24 },
+		lengthUnitsY: { min: 1, max: 24 },
+		widthUnitsX: { min: 1, max: 8 },
+		widthUnitsY: { min: 1, max: 8 },
+		zHeightValue: {
 			min: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
 			max: PIPEWARE_THICKNESS_MAX,
-		}),
-	}),
-	X: Object.freeze({
-		lengthUnitsLeft: Object.freeze({ min: 1, max: 24 }),
-		lengthUnitsRight: Object.freeze({ min: 1, max: 24 }),
-		lengthUnitsTop: Object.freeze({ min: 1, max: 24 }),
-		lengthUnitsBottom: Object.freeze({ min: 1, max: 24 }),
-		widthUnitsX: Object.freeze({ min: 1, max: 8 }),
-		widthUnitsY: Object.freeze({ min: 1, max: 8 }),
-		zHeightValue: Object.freeze({
+		},
+	},
+	X: {
+		lengthUnitsLeft: { min: 1, max: 24 },
+		lengthUnitsRight: { min: 1, max: 24 },
+		lengthUnitsTop: { min: 1, max: 24 },
+		lengthUnitsBottom: { min: 1, max: 24 },
+		widthUnitsX: { min: 1, max: 8 },
+		widthUnitsY: { min: 1, max: 8 },
+		zHeightValue: {
 			min: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
 			max: PIPEWARE_THICKNESS_MAX,
-		}),
-	}),
-	S: Object.freeze({
-		lengthUnitsBottom: Object.freeze({ min: 1, max: 24 }),
-		lengthUnitsTop: Object.freeze({ min: 1, max: 24 }),
-		offsetUnits: Object.freeze({ min: -12, max: 12 }),
-		riseUnits: Object.freeze({ min: 1, max: 24 }),
-		channelWidthUnits: Object.freeze({ min: 1, max: 8 }),
-		zHeightValue: Object.freeze({
+		},
+	},
+	S: {
+		lengthUnitsBottom: { min: 1, max: 24 },
+		lengthUnitsTop: { min: 1, max: 24 },
+		offsetUnits: { min: -12, max: 12 },
+		riseUnits: { min: 1, max: 24 },
+		channelWidthUnits: { min: 1, max: 8 },
+		zHeightValue: {
 			min: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
 			max: PIPEWARE_THICKNESS_MAX,
-		}),
-	}),
-	D: Object.freeze({
-		lengthUnitsBottom: Object.freeze({ min: 1, max: 24 }),
-		lengthUnitsTop: Object.freeze({ min: 1, max: 24 }),
-		offsetUnits: Object.freeze({ min: -12, max: 12 }),
-		riseUnits: Object.freeze({ min: 1, max: 24 }),
-		channelWidthUnits: Object.freeze({ min: 1, max: 8 }),
-		zHeightValue: Object.freeze({
+		},
+	},
+	D: {
+		lengthUnitsBottom: { min: 1, max: 24 },
+		lengthUnitsTop: { min: 1, max: 24 },
+		offsetUnits: { min: -12, max: 12 },
+		riseUnits: { min: 1, max: 24 },
+		channelWidthUnits: { min: 1, max: 8 },
+		zHeightValue: {
 			min: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
 			max: PIPEWARE_THICKNESS_MAX,
-		}),
-	}),
-});
+		},
+	},
+};
 
-export const PIPEWARE_DEFAULT_FEATURE_PARAMS = Object.freeze({
-	I: Object.freeze({
+export const PIPEWARE_DEFAULT_FEATURE_PARAMS = {
+	I: {
 		lengthUnits: 2,
 		widthUnits: 1,
 		zHeightValue: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
-	}),
-	B: Object.freeze({
+	},
+	B: {
 		lengthUnits: 3,
 		widthUnits: 1,
 		bridgeClearanceValue: PIPEWARE_DEFAULT_BOARD_THICKNESS + 7.4,
 		openingHeightValue: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
 		zHeightValue: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
-	}),
-	L: Object.freeze({
+	},
+	L: {
 		lengthUnitsX: 0,
 		lengthUnitsY: 0,
 		addedRadiusUnits: 0,
 		widthUnits: 1,
 		zHeightValue: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
-	}),
-	T: Object.freeze({
+	},
+	T: {
 		lengthUnitsLeft: 1,
 		lengthUnitsRight: 1,
 		lengthUnitsY: 1,
 		widthUnitsX: 1,
 		widthUnitsY: 1,
 		zHeightValue: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
-	}),
-	X: Object.freeze({
+	},
+	X: {
 		lengthUnitsLeft: 1,
 		lengthUnitsRight: 1,
 		lengthUnitsTop: 1,
@@ -130,127 +130,127 @@ export const PIPEWARE_DEFAULT_FEATURE_PARAMS = Object.freeze({
 		widthUnitsX: 1,
 		widthUnitsY: 1,
 		zHeightValue: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
-	}),
-	S: Object.freeze({
+	},
+	S: {
 		lengthUnitsBottom: 1,
 		lengthUnitsTop: 1,
 		offsetUnits: 2,
 		riseUnits: 2,
 		channelWidthUnits: 1,
 		zHeightValue: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
-	}),
-	D: Object.freeze({
+	},
+	D: {
 		lengthUnitsBottom: 1,
 		lengthUnitsTop: 1,
 		offsetUnits: 2,
 		riseUnits: 2,
 		channelWidthUnits: 1,
 		zHeightValue: PIPEWARE_PART_Z_HEIGHT_FOLLOW_BOARD,
-	}),
-});
+	},
+};
 
-export const PIPEWARE_PARAM_FIELDS = Object.freeze({
-	I: Object.freeze([
-		Object.freeze({ key: "lengthUnits", label: "Straight Length" }),
-		Object.freeze({ key: "widthUnits", label: "Width" }),
-		Object.freeze({
+export const PIPEWARE_PARAM_FIELDS = {
+	I: [
+		{ key: "lengthUnits", label: "Straight Length" },
+		{ key: "widthUnits", label: "Width" },
+		{
 			key: "zHeightValue",
 			label: "Part Inner Height",
 			step: 0.1,
-		}),
-	]),
-	B: Object.freeze([
-		Object.freeze({ key: "lengthUnits", label: "Bridge Length" }),
-		Object.freeze({ key: "widthUnits", label: "Width" }),
-		Object.freeze({
+		},
+	],
+	B: [
+		{ key: "lengthUnits", label: "Bridge Length" },
+		{ key: "widthUnits", label: "Width" },
+		{
 			key: "bridgeClearanceValue",
 			label: "Bridge Clearance",
 			step: 0.1,
-		}),
-		Object.freeze({
+		},
+		{
 			key: "openingHeightValue",
 			label: "Opening Inner Height",
 			step: 0.1,
-		}),
-		Object.freeze({
+		},
+		{
 			key: "zHeightValue",
 			label: "Part Inner Height",
 			step: 0.1,
-		}),
-	]),
-	L: Object.freeze([
-		Object.freeze({ key: "lengthUnitsX", label: "X Length" }),
-		Object.freeze({ key: "lengthUnitsY", label: "Y Length" }),
-		Object.freeze({ key: "addedRadiusUnits", label: "Added Radius" }),
-		Object.freeze({ key: "widthUnits", label: "Width" }),
-		Object.freeze({
+		},
+	],
+	L: [
+		{ key: "lengthUnitsX", label: "X Length" },
+		{ key: "lengthUnitsY", label: "Y Length" },
+		{ key: "addedRadiusUnits", label: "Added Radius" },
+		{ key: "widthUnits", label: "Width" },
+		{
 			key: "zHeightValue",
 			label: "Part Inner Height",
 			step: 0.1,
-		}),
-	]),
-	T: Object.freeze([
-		Object.freeze({ key: "lengthUnitsLeft", label: "Left Length" }),
-		Object.freeze({ key: "lengthUnitsRight", label: "Right Length" }),
-		Object.freeze({ key: "lengthUnitsY", label: "Stem Length" }),
-		Object.freeze({ key: "widthUnitsX", label: "X Width" }),
-		Object.freeze({ key: "widthUnitsY", label: "Y Width" }),
-		Object.freeze({
+		},
+	],
+	T: [
+		{ key: "lengthUnitsLeft", label: "Left Length" },
+		{ key: "lengthUnitsRight", label: "Right Length" },
+		{ key: "lengthUnitsY", label: "Stem Length" },
+		{ key: "widthUnitsX", label: "X Width" },
+		{ key: "widthUnitsY", label: "Y Width" },
+		{
 			key: "zHeightValue",
 			label: "Part Inner Height",
 			step: 0.1,
-		}),
-	]),
-	X: Object.freeze([
-		Object.freeze({ key: "lengthUnitsLeft", label: "Left Length" }),
-		Object.freeze({ key: "lengthUnitsRight", label: "Right Length" }),
-		Object.freeze({ key: "lengthUnitsTop", label: "Top Length" }),
-		Object.freeze({ key: "lengthUnitsBottom", label: "Bottom Length" }),
-		Object.freeze({ key: "widthUnitsX", label: "X Width" }),
-		Object.freeze({ key: "widthUnitsY", label: "Y Width" }),
-		Object.freeze({
+		},
+	],
+	X: [
+		{ key: "lengthUnitsLeft", label: "Left Length" },
+		{ key: "lengthUnitsRight", label: "Right Length" },
+		{ key: "lengthUnitsTop", label: "Top Length" },
+		{ key: "lengthUnitsBottom", label: "Bottom Length" },
+		{ key: "widthUnitsX", label: "X Width" },
+		{ key: "widthUnitsY", label: "Y Width" },
+		{
 			key: "zHeightValue",
 			label: "Part Inner Height",
 			step: 0.1,
-		}),
-	]),
-	S: Object.freeze([
-		Object.freeze({ key: "lengthUnitsBottom", label: "Bottom Length" }),
-		Object.freeze({ key: "lengthUnitsTop", label: "Top Length" }),
-		Object.freeze({ key: "offsetUnits", label: "Offset" }),
-		Object.freeze({ key: "riseUnits", label: "Rise" }),
-		Object.freeze({ key: "channelWidthUnits", label: "Channel Width" }),
-		Object.freeze({
+		},
+	],
+	S: [
+		{ key: "lengthUnitsBottom", label: "Bottom Length" },
+		{ key: "lengthUnitsTop", label: "Top Length" },
+		{ key: "offsetUnits", label: "Offset" },
+		{ key: "riseUnits", label: "Rise" },
+		{ key: "channelWidthUnits", label: "Channel Width" },
+		{
 			key: "zHeightValue",
 			label: "Part Inner Height",
 			step: 0.1,
-		}),
-	]),
-	D: Object.freeze([
-		Object.freeze({ key: "lengthUnitsBottom", label: "Bottom Length" }),
-		Object.freeze({ key: "lengthUnitsTop", label: "Top Length" }),
-		Object.freeze({ key: "offsetUnits", label: "Offset" }),
-		Object.freeze({ key: "riseUnits", label: "Rise" }),
-		Object.freeze({ key: "channelWidthUnits", label: "Channel Width" }),
-		Object.freeze({
+		},
+	],
+	D: [
+		{ key: "lengthUnitsBottom", label: "Bottom Length" },
+		{ key: "lengthUnitsTop", label: "Top Length" },
+		{ key: "offsetUnits", label: "Offset" },
+		{ key: "riseUnits", label: "Rise" },
+		{ key: "channelWidthUnits", label: "Channel Width" },
+		{
 			key: "zHeightValue",
 			label: "Part Inner Height",
 			step: 0.1,
-		}),
-	]),
-});
+		},
+	],
+};
 
-export const PIPEWARE_DEFAULT_ACTIVE_FEATURE_CONFIG = Object.freeze({
+export const PIPEWARE_DEFAULT_ACTIVE_FEATURE_CONFIG = {
 	type: "I",
 	rotation: 0,
 	params: PIPEWARE_DEFAULT_FEATURE_PARAMS.I,
-});
+};
 
-export const PIPEWARE_DEFAULT_EDITOR_STATE = Object.freeze({
-	pipewarePlacements: Object.freeze([]),
+export const PIPEWARE_DEFAULT_EDITOR_STATE = {
+	pipewarePlacements: [],
 	pipewareSelectedPlacementId: null,
 	pipewareActiveFeatureConfig: PIPEWARE_DEFAULT_ACTIVE_FEATURE_CONFIG,
-});
+};
 
 export const PIPEWARE_OPENING_LINE_LENGTH_UNITS = 0.3;
 export const PIPEWARE_OPENING_EDGE_INSET_UNITS = 0.22;

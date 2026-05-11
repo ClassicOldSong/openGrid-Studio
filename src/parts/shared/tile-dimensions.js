@@ -1,11 +1,11 @@
-export const DEFAULT_TILE_DIMENSIONS = Object.freeze({
+export const DEFAULT_TILE_DIMENSIONS = {
 	tileSizeValue: 28,
 	tileThicknessValue: 6.8,
 	liteTileThicknessValue: 4,
 	heavyTileThicknessValue: 13.8,
 	heavyTileGapValue: 0.2,
 	circleSegmentsValue: 128,
-});
+};
 
 export function createDefaultTileDimensions() {
 	return { ...DEFAULT_TILE_DIMENSIONS };

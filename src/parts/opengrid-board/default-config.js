@@ -1,7 +1,7 @@
 import { buildRectangleMask } from "./model.js";
 import { createDefaultTileDimensions } from "../shared/tile-dimensions.js";
 
-export const OPEN_GRID_BOARD_DEFAULT_CONFIG = Object.freeze({
+export const OPEN_GRID_BOARD_DEFAULT_CONFIG = {
 	width: 4,
 	height: 4,
 	top1Text: "0",
@@ -25,7 +25,7 @@ export const OPEN_GRID_BOARD_DEFAULT_CONFIG = Object.freeze({
 	stackingMethod: "Interface Layer",
 	interfaceThicknessValue: 0.4,
 	interfaceSeparationValue: 0.1,
-});
+};
 
 export function createOpenGridBoardDefaultConfig() {
 	return {

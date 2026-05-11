@@ -5,11 +5,11 @@ import {
 	warmPicaRailGeometry,
 } from "./direct-geometry.js";
 
-export const PICARAIL_WORKER_PART = Object.freeze({
+export const PICARAIL_WORKER_PART = {
 	id: PICARAIL_PART_ID,
-	renderer: Object.freeze({
+	renderer: {
 		warm: warmPicaRailGeometry,
 		renderPreviewMesh: renderPicaRailPreviewMesh,
 		renderExport: renderPicaRailExport,
-	}),
-});
+	},
+};
